@@ -33,6 +33,7 @@ class TicTacToe:
             winner = self.check_winner()
             if winner:
                 self.highlight_winner(winner)
+                self.show_fireworks()
                 messagebox.showinfo("Tic Tac Toe", f"Player {self.current_player} wins!")
                 self.reset_game()
             elif all(all(cell != "" for cell in row) for row in self.board):
@@ -60,6 +61,25 @@ class TicTacToe:
         color = random.choice(colors)
         for row, col in winner:
             self.buttons[row][col].config(bg=color)
+
+    def show_fireworks(self):
+        # Create a new window for fireworks
+        fireworks = tk.Toplevel(self.root)
+        fireworks.title("Fireworks!")
+        canvas = tk.Canvas(fireworks, width=400, height=400, bg='black')
+        canvas.pack()
+
+        def create_circle(x, y, r, **kwargs):
+            return canvas.create_oval(x-r, y-r, x+r, y+r, **kwargs)
+
+        for _ in range(20):
+            x = random.randint(50, 350)
+            y = random.randint(50, 350)
+            r = random.randint(10, 50)
+            color = random.choice(["red", "yellow", "blue", "green", "orange", "purple"])
+            create_circle(x, y, r, outline=color, width=2, fill=color)
+
+        fireworks.after(5000, fireworks.destroy)  #  the fireworks window will be closed after 5 seconds
 
     def reset_game(self):
         self.current_player = "X"
