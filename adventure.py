@@ -16,6 +16,9 @@ pygame.font.init()
 WINDOW_WIDTH = 1024
 WINDOW_HEIGHT = 768
 FPS = 60
+TILE_SIZE = 40
+PLAYER_SIZE = 40
+ENEMY_SIZE = 40
 
 # Colors
 WHITE = (255, 255, 255)
@@ -52,6 +55,13 @@ FONT_LARGE = pygame.font.Font(None, 72)
 FONT_MEDIUM = pygame.font.Font(None, 48)
 FONT_SMALL = pygame.font.Font(None, 32)
 
+class TileType(Enum):
+    FLOOR = 0
+    WALL = 1
+    DOOR = 2
+    CHEST = 3
+    ENEMY_SPAWN = 4
+
 @dataclass
 class Player:
     name: str
@@ -70,25 +80,16 @@ class Player:
     speed: int = 5
     animation_frame: int = 0
     facing: str = 'right'
+    current_room: Optional['Room'] = None
+    special_cooldown: int = 0
+    special_duration: int = 0
 
     @classmethod
     def create(cls, name: str, class_type: str) -> 'Player':
         base_stats = {
-            "Warrior": {
-                "health": 120, "mana": 40, 
-                "strength": 10, "intelligence": 4, "agility": 6,
-                "special": "Berserk Mode"
-            },
-            "Mage": {
-                "health": 80, "mana": 120, 
-                "strength": 4, "intelligence": 10, "agility": 6,
-                "special": "Arcane Burst"
-            },
-            "Rogue": {
-                "health": 100, "mana": 60, 
-                "strength": 6, "intelligence": 6, "agility": 10,
-                "special": "Shadow Step"
-            }
+            "Warrior": {"health": 120, "mana": 40, "strength": 10, "intelligence": 4, "agility": 6},
+            "Mage": {"health": 80, "mana": 120, "strength": 4, "intelligence": 10, "agility": 6},
+            "Rogue": {"health": 100, "mana": 60, "strength": 6, "intelligence": 6, "agility": 10}
         }
         stats = base_stats[class_type]
         return cls(
@@ -106,26 +107,22 @@ class Player:
         )
 
     def move(self, keys):
-        moved = False
+        if self.current_room is None:
+            return
+            
+        max_x = (self.current_room.width * TILE_SIZE) - PLAYER_SIZE
+        max_y = (self.current_room.height * TILE_SIZE) - PLAYER_SIZE
+        
         if keys[pygame.K_LEFT] and self.x > 0:
             self.x -= self.speed
             self.facing = 'left'
-            moved = True
-        if keys[pygame.K_RIGHT] and self.x < WINDOW_WIDTH - 40:
+        if keys[pygame.K_RIGHT] and self.x < max_x:
             self.x += self.speed
             self.facing = 'right'
-            moved = True
         if keys[pygame.K_UP] and self.y > 0:
             self.y -= self.speed
-            moved = True
-        if keys[pygame.K_DOWN] and self.y < WINDOW_HEIGHT - 40:
+        if keys[pygame.K_DOWN] and self.y < max_y:
             self.y += self.speed
-            moved = True
-
-        if moved:
-            self.animation_frame = (self.animation_frame + 1) % 30
-        else:
-            self.animation_frame = 0
 
     def draw(self, screen):
         # Draw character with bob animation
@@ -203,6 +200,21 @@ class Player:
             text_surface = FONT_SMALL.render(text, True, WHITE)
             screen.blit(text_surface, (WINDOW_WIDTH - 200, 15 + i * 20))
 
+    def take_damage(self, amount):
+        self.health = max(0, self.health - amount)
+        
+    def attack(self, enemies):
+        attack_range = 60
+        attack_damage = self.strength * 5
+        
+        for enemy in enemies:
+            dist = math.sqrt((enemy.x - self.x)**2 + (enemy.y - self.y)**2)
+            if dist <= attack_range:
+                enemy.health -= attack_damage
+                if enemy.health <= 0:
+                    enemies.remove(enemy)
+                    self.gold += random.randint(10, 30)
+
 class AnimatedButton:
     def __init__(self, x, y, width, height, text, color):
         self.rect = pygame.Rect(x, y, width, height)
@@ -258,12 +270,50 @@ class AnimatedButton:
                 return True
         return False
 
-class TileType(Enum):
-    FLOOR = 0
-    WALL = 1
-    DOOR = 2
-    CHEST = 3
-    ENEMY_SPAWN = 4
+class Particle:
+    def __init__(self, x, y, color, velocity=(0, 0), lifetime=30, size=3):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.vx, self.vy = velocity
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        self.size = size
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.lifetime -= 1
+        return self.lifetime > 0
+
+    def draw(self, screen, camera_x, camera_y):
+        alpha = int(255 * (self.lifetime / self.max_lifetime))
+        color = (*self.color[:3], alpha)
+        surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        pygame.draw.circle(surf, color, (self.size//2, self.size//2), self.size//2)
+        screen.blit(surf, (self.x - camera_x, self.y - camera_y))
+
+class ParticleSystem:
+    def __init__(self):
+        self.particles = []
+
+    def add_particle(self, x, y, color, velocity=(0, 0), lifetime=30, size=3):
+        self.particles.append(Particle(x, y, color, velocity, lifetime, size))
+
+    def add_hit_effect(self, x, y, color):
+        for _ in range(10):
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(2, 5)
+            vx = math.cos(angle) * speed
+            vy = math.sin(angle) * speed
+            self.add_particle(x, y, color, (vx, vy), random.randint(20, 40))
+
+    def update(self):
+        self.particles = [p for p in self.particles if p.update()]
+
+    def draw(self, screen, camera_x, camera_y):
+        for particle in self.particles:
+            particle.draw(screen, camera_x, camera_y)
 
 class Enemy:
     def __init__(self, x, y, enemy_type):
@@ -279,6 +329,11 @@ class Enemy:
         self.state = "idle"  # idle, chase, attack
         self.detection_range = 200
         self.attack_range = 50
+        self.particles = ParticleSystem()
+        self.hit_cooldown = 0
+        self.knockback = 0
+        self.knockback_dx = 0
+        self.knockback_dy = 0
         
         # Set enemy-specific stats
         if enemy_type == "Skeleton":
@@ -294,7 +349,81 @@ class Enemy:
             self.damage = 10
             self.speed = 5
 
+        # Add enemy-specific effects
+        self.effects = {
+            "Skeleton": self.skeleton_effect,
+            "Demon": self.demon_effect,
+            "Ghost": self.ghost_effect
+        }
+
+    def skeleton_effect(self):
+        if random.random() < 0.02:
+            self.particles.add_particle(
+                self.x + random.randint(0, ENEMY_SIZE),
+                self.y + ENEMY_SIZE,
+                (200, 200, 200, 128),
+                (0, -1),
+                20
+            )
+
+    def demon_effect(self):
+        if random.random() < 0.05:
+            self.particles.add_particle(
+                self.x + ENEMY_SIZE//2,
+                self.y + ENEMY_SIZE//2,
+                (255, 50, 0, 200),
+                (random.uniform(-1, 1), random.uniform(-1, 1)),
+                15
+            )
+
+    def ghost_effect(self):
+        if random.random() < 0.1:
+            self.particles.add_particle(
+                self.x + random.randint(0, ENEMY_SIZE),
+                self.y + random.randint(0, ENEMY_SIZE),
+                (200, 200, 255, 100),
+                (0, -0.5),
+                40
+            )
+
+    def take_damage(self, amount, knockback_direction):
+        self.health -= amount
+        self.hit_cooldown = 10
+        
+        # Apply knockback
+        self.knockback = 20
+        self.knockback_dx, self.knockback_dy = knockback_direction
+        
+        # Add hit effect
+        hit_colors = {
+            "Skeleton": (200, 200, 200),
+            "Demon": (255, 100, 100),
+            "Ghost": (200, 200, 255)
+        }
+        self.particles.add_hit_effect(
+            self.x + ENEMY_SIZE//2,
+            self.y + ENEMY_SIZE//2,
+            hit_colors[self.enemy_type]
+        )
+
     def update(self, player, current_time):
+        # Apply enemy-specific effects
+        self.effects[self.enemy_type]()
+        
+        # Update particles
+        self.particles.update()
+        
+        # Handle knockback
+        if self.knockback > 0:
+            self.x += self.knockback_dx * 2
+            self.y += self.knockback_dy * 2
+            self.knockback -= 1
+            return
+
+        # Update hit cooldown
+        if self.hit_cooldown > 0:
+            self.hit_cooldown -= 1
+
         dist_to_player = math.sqrt((player.x - self.x)**2 + (player.y - self.y)**2)
         
         # Update state based on distance to player
@@ -322,19 +451,26 @@ class Enemy:
                 self.attack_cooldown = 60  # 1 second at 60 FPS
             self.attack_cooldown = max(0, self.attack_cooldown - 1)
 
-    def draw(self, screen):
-        # Draw enemy shadow
-        shadow_rect = pygame.Rect(self.x, self.y + 35, 40, 20)
-        pygame.draw.ellipse(screen, (0, 0, 0, 128), shadow_rect)
+    def draw(self, screen, camera_x, camera_y):
+        # Draw particles
+        self.particles.draw(screen, camera_x, camera_y)
         
-        # Draw enemy body with bob animation when moving
-        bob_offset = math.sin(self.animation_frame * 0.2) * 3 if self.state == "chase" else 0
+        # Draw enemy with hit flash
         enemy_color = {
             "Skeleton": (200, 200, 200),
             "Demon": (200, 0, 0),
             "Ghost": (200, 200, 255)
         }[self.enemy_type]
         
+        if self.hit_cooldown > 0:
+            enemy_color = WHITE
+        
+        # Draw enemy shadow
+        shadow_rect = pygame.Rect(self.x, self.y + 35, 40, 20)
+        pygame.draw.ellipse(screen, (0, 0, 0, 128), shadow_rect)
+        
+        # Draw enemy body with bob animation when moving
+        bob_offset = math.sin(self.animation_frame * 0.2) * 3 if self.state == "chase" else 0
         enemy_rect = pygame.Rect(self.x, self.y + bob_offset, 40, 40)
         pygame.draw.rect(screen, enemy_color, enemy_rect)
         
@@ -378,41 +514,50 @@ class Room:
                 self.tiles[y][x] = TileType.CHEST
                 self.chests.append((x, y))
                 
-        # Add enemies
+        # Add enemies with proper positioning
         enemy_types = ["Skeleton", "Demon", "Ghost"]
         for _ in range(3):
             x = random.randint(1, self.width-2)
             y = random.randint(1, self.height-2)
             if self.tiles[y][x] == TileType.FLOOR:
                 enemy_type = random.choice(enemy_types)
-                self.enemies.append(Enemy(x * 40, y * 40, enemy_type))
+                self.enemies.append(Enemy(
+                    x * TILE_SIZE,  # Convert grid to pixel position
+                    y * TILE_SIZE, 
+                    enemy_type
+                ))
 
     def draw(self, screen, camera_x, camera_y):
         for y in range(self.height):
             for x in range(self.width):
-                screen_x = x * 40 - camera_x
-                screen_y = y * 40 - camera_y
+                tile_x = x * TILE_SIZE
+                tile_y = y * TILE_SIZE
+                screen_x = tile_x - camera_x
+                screen_y = tile_y - camera_y
                 
-                # Only draw tiles that are on screen
-                if (0 <= screen_x <= WINDOW_WIDTH and 
-                    0 <= screen_y <= WINDOW_HEIGHT):
+                # Only draw tiles that are visible
+                if (-TILE_SIZE < screen_x < WINDOW_WIDTH and 
+                    -TILE_SIZE < screen_y < WINDOW_HEIGHT):
                     if self.tiles[y][x] == TileType.WALL:
                         pygame.draw.rect(screen, GRAY, 
-                                       (screen_x, screen_y, 40, 40))
+                                       (screen_x, screen_y, TILE_SIZE, TILE_SIZE))
                     elif self.tiles[y][x] == TileType.CHEST:
                         pygame.draw.rect(screen, GOLD, 
-                                       (screen_x, screen_y, 40, 40))
+                                       (screen_x, screen_y, TILE_SIZE, TILE_SIZE))
                     elif self.tiles[y][x] == TileType.DOOR:
                         pygame.draw.rect(screen, DARK_GREEN, 
-                                       (screen_x, screen_y, 40, 40))
+                                       (screen_x, screen_y, TILE_SIZE, TILE_SIZE))
                     else:  # FLOOR
                         pygame.draw.rect(screen, (30, 30, 30), 
-                                       (screen_x, screen_y, 40, 40))
+                                       (screen_x, screen_y, TILE_SIZE, TILE_SIZE))
 
 class Game:
     def __init__(self):
         self.state = "menu"
         self.player = None
+        self.current_room = None
+        self.camera_x = 0
+        self.camera_y = 0
         self.buttons = {
             "menu": [
                 AnimatedButton(WINDOW_WIDTH//2 - 100, 250, 200, 50, "New Game", WHITE),
@@ -486,8 +631,7 @@ class Game:
             for i, button in enumerate(self.buttons["class_select"]):
                 if button.handle_event(event):
                     class_types = ["Warrior", "Mage", "Rogue"]
-                    self.player = Player.create("Player", class_types[i])
-                    self.state = "game"
+                    self.start_new_game(class_types[i])
 
     def draw_menu(self):
         # Animated title
@@ -525,12 +669,100 @@ class Game:
         for button in self.buttons["class_select"]:
             button.draw(screen)
 
+    def start_new_game(self, class_type):
+        self.player = Player.create("Player", class_type)
+        self.current_room = Room(20, 15)
+        self.current_room.generate()
+        self.player.current_room = self.current_room
+        self.state = "game"
+
     def update_game(self):
         keys = pygame.key.get_pressed()
+        
+        # Handle player movement
         self.player.move(keys)
+        
+        # Update camera position to center on player
+        self.camera_x = self.player.x + PLAYER_SIZE//2 - WINDOW_WIDTH//2
+        self.camera_y = self.player.y + PLAYER_SIZE//2 - WINDOW_HEIGHT//2
+        
+        # Clamp camera to room boundaries
+        max_camera_x = (self.current_room.width * TILE_SIZE) - WINDOW_WIDTH
+        max_camera_y = (self.current_room.height * TILE_SIZE) - WINDOW_HEIGHT
+        self.camera_x = max(0, min(self.camera_x, max_camera_x))
+        self.camera_y = max(0, min(self.camera_y, max_camera_y))
+        
+        # Handle attacks
+        if keys[pygame.K_SPACE]:
+            self.player.attack(self.current_room.enemies)
+        
+        # Update enemies
+        current_time = pygame.time.get_ticks()
+        for enemy in self.current_room.enemies:
+            enemy.update(self.player, current_time)
 
     def draw_game(self):
+        # Draw room and environment
+        self.current_room.draw(screen, self.camera_x, self.camera_y)
+        
+        # Draw enemies with camera offset
+        for enemy in self.current_room.enemies:
+            enemy.draw(screen, self.camera_x, self.camera_y)
+        
+        # Draw player
         self.player.draw(screen)
+        
+        # Draw UI elements
+        self.draw_game_ui()
+
+    def draw_game_ui(self):
+        # Draw mini-map in top-right corner
+        map_size = 150
+        map_surface = pygame.Surface((map_size, map_size))
+        map_surface.fill((0, 0, 0))
+        map_surface.set_alpha(200)
+        
+        # Calculate scale factors
+        room_width = self.current_room.width * TILE_SIZE
+        room_height = self.current_room.height * TILE_SIZE
+        scale_x = map_size / room_width
+        scale_y = map_size / room_height
+        scale = min(scale_x, scale_y)
+        
+        # Draw room layout
+        for y in range(self.current_room.height):
+            for x in range(self.current_room.width):
+                if self.current_room.tiles[y][x] == TileType.WALL:
+                    color = GRAY
+                elif self.current_room.tiles[y][x] == TileType.CHEST:
+                    color = GOLD
+                elif self.current_room.tiles[y][x] == TileType.DOOR:
+                    color = DARK_GREEN
+                else:
+                    color = (30, 30, 30)
+                
+                pygame.draw.rect(map_surface, color,
+                               (x * TILE_SIZE * scale, 
+                                y * TILE_SIZE * scale,
+                                TILE_SIZE * scale, 
+                                TILE_SIZE * scale))
+        
+        # Draw player position
+        player_x = (self.player.x) * scale
+        player_y = (self.player.y) * scale
+        pygame.draw.circle(map_surface, GREEN, (player_x, player_y), 3)
+        
+        # Draw enemies
+        for enemy in self.current_room.enemies:
+            enemy_x = (enemy.x) * scale
+            enemy_y = (enemy.y) * scale
+            pygame.draw.circle(map_surface, RED, (enemy_x, enemy_y), 2)
+        
+        # Draw map border
+        pygame.draw.rect(map_surface, WHITE, (0, 0, map_size, map_size), 2)
+        
+        # Position and draw the map
+        screen.blit(map_surface, (WINDOW_WIDTH - map_size - 10, 10))
 
     def load_game(self):
         try:
