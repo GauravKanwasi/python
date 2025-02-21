@@ -1,4 +1,4 @@
-import random
+mport random
 import tkinter as tk
 from tkinter import ttk, messagebox
 import webbrowser
