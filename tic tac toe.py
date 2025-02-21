@@ -92,11 +92,6 @@ class TicTacToe:
             self.root.grid_columnconfigure(i, weight=1)
 
     def button_click(self, row, col):
-        if self.board[row][col] == "" and not self.check_winner():
-            self.make_move(row, col)
-            
-            if not self.two_player and self.current_player == "O" and not self.check_winner():
-                self.root.after(500, self.computer_move)
 
     def make_move(self, row, col):
         self.buttons[row][col].config(text=self.current_player)
@@ -181,8 +176,7 @@ class TicTacToe:
         for row, col in winner:
             self.buttons[row][col].config(bg=color)
 
-    def is_tie(self):
-        return all(cell != "" for row in self.board for cell in row)
+
 
     def reset_game(self):
         self.current_player = "X"
