@@ -1,24 +1,41 @@
 import turtle
-import random
+import colorsys
 
 # Setup the screen
 screen = turtle.Screen()
-screen.bgcolor("black")  # Set background color to black
+screen.bgcolor("black")
 screen.setup(width=800, height=600)
+screen.title("Rainbow Spiral")
+screen.colormode(1.0)  # Using 0-1 range for color values
 
-# Create a turtle object
+# Create the turtle object
 spiral = turtle.Turtle()
-spiral.speed(0)  # Fastest drawing speed
-spiral.width(2)  # Set pen width
+spiral.speed(0)        # Fastest animation speed
+spiral.hideturtle()    # Hide the turtle cursor
 
-# List of colors to cycle through
-colors = ['red', 'yellow', 'green', 'blue', 'purple', 'orange', 'pink']
+def draw_enhanced_spiral(angle, max_distance):
+    distance = 1
+    while distance < max_distance:
+        # Calculate rainbow color using HSV to RGB conversion
+        hue = (distance / 50) % 1.0  # Cycle colors every 50 steps
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        spiral.color(rgb)
+        
+        # Dynamically adjust pen width
+        spiral.width(0.5 + (distance / max_distance) * 4)
+        
+        # Draw and rotate
+        spiral.forward(distance)
+        spiral.left(angle)
+        
+        distance += 1
 
-# Draw a colorful spiral
-angle = 10
-distance = 1
-while True:
-    spiral.color(random.choice(colors))  # Randomly choose a color
-    spiral.forward(distance)  # Move the turtle forward
-    spiral.left(angle)  # Turn the turtle left
-    distance += 1  # Gradually increase the distance for the spiral effect
+# Position the turtle and draw
+spiral.penup()
+spiral.goto(0, 0)
+spiral.pendown()
+
+draw_enhanced_spiral(angle=12, max_distance=120)
+
+# Finish up
+screen.exitonclick()
