@@ -92,13 +92,21 @@ class TicTacToe:
             self.root.grid_columnconfigure(i, weight=1)
 
     def button_click(self, row, col):
+        # Check if the square is empty
+        if self.board[row][col] == "":
+            self.make_move(row, col)
+            
+            # If computer's turn (single player mode)
+            if not self.two_player and self.current_player == "O" and not self.check_winner() and not self.is_tie():
+                self.root.after(500, self.computer_move)  # Add a slight delay for computer move
 
     def make_move(self, row, col):
         self.buttons[row][col].config(text=self.current_player)
         self.board[row][col] = self.current_player
         
-        if winner := self.check_winner():
-            self.handle_win(winner)
+        winner_cells = self.check_winner()
+        if winner_cells:
+            self.handle_win(winner_cells)
         elif self.is_tie():
             self.handle_tie()
         else:
@@ -112,6 +120,7 @@ class TicTacToe:
                 if self.board[row][col] == "":
                     self.board[row][col] = "O"
                     if self.check_winner():
+                        self.board[row][col] = ""
                         self.make_move(row, col)
                         return
                     self.board[row][col] = ""
@@ -127,6 +136,11 @@ class TicTacToe:
                         return
                     self.board[row][col] = ""
         
+        # Take center if available
+        if self.board[1][1] == "":
+            self.make_move(1, 1)
+            return
+            
         # Random move
         empty = [(r, c) for r in range(3) for c in range(3) if self.board[r][c] == ""]
         if empty:
@@ -135,9 +149,9 @@ class TicTacToe:
 
     def check_winner(self):
         # Check rows
-        for row in self.board:
-            if row[0] == row[1] == row[2] != "":
-                return [(self.board.index(row), 0), (self.board.index(row), 1), (self.board.index(row), 2)]
+        for row in range(3):
+            if self.board[row][0] == self.board[row][1] == self.board[row][2] != "":
+                return [(row, 0), (row, 1), (row, 2)]
         
         # Check columns
         for col in range(3):
@@ -152,9 +166,17 @@ class TicTacToe:
         
         return None
 
-    def handle_win(self, winner):
-        self.highlight_winner(winner)
-        winner_symbol = self.current_player
+    def is_tie(self):
+        # Check if all cells are filled
+        for row in range(3):
+            for col in range(3):
+                if self.board[row][col] == "":
+                    return False
+        return True
+
+    def handle_win(self, winner_cells):
+        self.highlight_winner(winner_cells)
+        winner_symbol = self.board[winner_cells[0][0]][winner_cells[0][1]]
         if winner_symbol == "X":
             self.x_wins += 1
             self.x_score.config(text=f"X: {self.x_wins}")
@@ -162,21 +184,20 @@ class TicTacToe:
             self.o_wins += 1
             self.o_score.config(text=f"O: {self.o_wins}")
         
-        messagebox.showinfo("Game Over", f"Player {winner_symbol} wins!")
-        self.reset_game()
+        # Add a small delay before showing message
+        self.root.after(100, lambda: messagebox.showinfo("Game Over", f"Player {winner_symbol} wins!"))
+        self.root.after(200, self.reset_game)
 
     def handle_tie(self):
         self.ties += 1
         self.tie_score.config(text=f"Ties: {self.ties}")
-        messagebox.showinfo("Game Over", "It's a tie!")
-        self.reset_game()
+        self.root.after(100, lambda: messagebox.showinfo("Game Over", "It's a tie!"))
+        self.root.after(200, self.reset_game)
 
-    def highlight_winner(self, winner):
+    def highlight_winner(self, winner_cells):
         color = random.choice(self.current_theme['highlight_colors'])
-        for row, col in winner:
+        for row, col in winner_cells:
             self.buttons[row][col].config(bg=color)
-
-
 
     def reset_game(self):
         self.current_player = "X"
@@ -198,6 +219,8 @@ class TicTacToe:
     def set_game_mode(self, two_player):
         self.two_player = two_player
         self.reset_game()
+        mode_text = "Two Player" if two_player else "Single Player"
+        messagebox.showinfo("Game Mode", f"Changed to {mode_text} mode")
 
     def set_theme(self, theme_name):
         themes = {
