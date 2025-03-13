@@ -5,20 +5,22 @@ import random
 class TicTacToe:
     def __init__(self, root):
         self.root = root
-        self.root.title("Tic Tac Toe+")
+        self.root.title("Tic Tac Toe++")
         self.current_player = "X"
         self.two_player = True
+        self.difficulty = 'medium'  # 'easy', 'medium', 'hard'
         self.board = [["" for _ in range(3)] for _ in range(3)]
         self.buttons = [[None for _ in range(3)] for _ in range(3)]
         self.x_wins = 0
         self.o_wins = 0
         self.ties = 0
         
-        # Default theme
+        # Default theme with animation properties
         self.current_theme = {
             'bg': 'lightgrey',
             'button_bg': 'white',
             'button_fg': 'black',
+            'hover_bg': '#e0e0e0',
             'active_bg': 'lightblue',
             'text_bg': 'lightgrey',
             'text_fg': 'black',
@@ -28,6 +30,7 @@ class TicTacToe:
         self.create_widgets()
         self.create_menu()
         self.apply_theme()
+        self.root.minsize(400, 500)
 
     def create_menu(self):
         menu_bar = tk.Menu(self.root)
@@ -37,6 +40,14 @@ class TicTacToe:
         game_menu.add_command(label="New Game", command=self.reset_game)
         game_menu.add_command(label="Two Player", command=lambda: self.set_game_mode(True))
         game_menu.add_command(label="Single Player", command=lambda: self.set_game_mode(False))
+        
+        # Difficulty submenu
+        difficulty_menu = tk.Menu(game_menu, tearoff=0)
+        difficulty_menu.add_command(label="Easy", command=lambda: self.set_difficulty('easy'))
+        difficulty_menu.add_command(label="Medium", command=lambda: self.set_difficulty('medium'))
+        difficulty_menu.add_command(label="Hard", command=lambda: self.set_difficulty('hard'))
+        game_menu.add_cascade(label="Difficulty", menu=difficulty_menu)
+        
         game_menu.add_command(label="Reset Scores", command=self.reset_scores)
         game_menu.add_separator()
         game_menu.add_command(label="Exit", command=self.root.quit)
@@ -46,6 +57,7 @@ class TicTacToe:
         theme_menu.add_command(label="Light", command=lambda: self.set_theme('light'))
         theme_menu.add_command(label="Dark", command=lambda: self.set_theme('dark'))
         theme_menu.add_command(label="Ocean", command=lambda: self.set_theme('ocean'))
+        theme_menu.add_command(label="Sunset", command=lambda: self.set_theme('sunset'))
         
         # Help menu
         help_menu = tk.Menu(menu_bar, tearoff=0)
@@ -59,19 +71,22 @@ class TicTacToe:
         self.root.config(menu=menu_bar)
 
     def create_widgets(self):
-        # Turn indicator
+        # Turn indicator with animation support
         self.turn_label = tk.Label(self.root, text=f"Player {self.current_player}'s turn", 
                                  font=('Arial', 18, 'bold'), pady=10)
         self.turn_label.grid(row=0, column=0, columnspan=3)
         
-        # Game board
+        # Game board with hover effects
         for row in range(3):
             for col in range(3):
-                self.buttons[row][col] = tk.Button(
+                btn = tk.Button(
                     self.root, text="", font=('Arial', 40), width=4, height=2,
                     command=lambda row=row, col=col: self.button_click(row, col)
                 )
-                self.buttons[row][col].grid(row=row+1, column=col, sticky='nsew', padx=2, pady=2)
+                btn.bind("<Enter>", self.on_button_enter)
+                btn.bind("<Leave>", self.on_button_leave)
+                btn.grid(row=row+1, column=col, sticky='nsew', padx=2, pady=2)
+                self.buttons[row][col] = btn
         
         # Scoreboard
         self.score_frame = tk.Frame(self.root)
@@ -91,30 +106,57 @@ class TicTacToe:
             self.root.grid_rowconfigure(i+1, weight=1)
             self.root.grid_columnconfigure(i, weight=1)
 
+    def on_button_enter(self, event):
+        event.widget.config(bg=self.current_theme['hover_bg'])
+
+    def on_button_leave(self, event):
+        event.widget.config(bg=self.current_theme['button_bg'])
+
     def button_click(self, row, col):
-        # Check if the square is empty
         if self.board[row][col] == "":
+            self.animate_button_click(row, col)
             self.make_move(row, col)
             
-            # If computer's turn (single player mode)
-            if not self.two_player and self.current_player == "O" and not self.check_winner() and not self.is_tie():
-                self.root.after(500, self.computer_move)  # Add a slight delay for computer move
+            if not self.two_player and self.current_player == "O":
+                self.toggle_buttons_state(tk.DISABLED)
+                self.root.after(500, self.computer_move)
+
+    def animate_button_click(self, row, col):
+        btn = self.buttons[row][col]
+        original_bg = btn.cget('bg')
+        btn.config(bg=self.current_theme['active_bg'])
+        self.root.after(100, lambda: btn.config(bg=original_bg))
 
     def make_move(self, row, col):
         self.buttons[row][col].config(text=self.current_player)
         self.board[row][col] = self.current_player
         
-        winner_cells = self.check_winner()
-        if winner_cells:
+        if winner_cells := self.check_winner():
             self.handle_win(winner_cells)
         elif self.is_tie():
             self.handle_tie()
         else:
             self.current_player = "O" if self.current_player == "X" else "X"
-            self.update_turn_label()
+            self.animate_turn_label()
 
     def computer_move(self):
-        # Try to win
+        if self.difficulty == 'easy':
+            self.computer_move_easy()
+        elif self.difficulty == 'medium':
+            self.computer_move_medium()
+        elif self.difficulty == 'hard':
+            self.computer_move_hard()
+        
+        self.toggle_buttons_state(tk.NORMAL)
+
+    def computer_move_easy(self):
+        empty = [(r, c) for r in range(3) for c in range(3) if self.board[r][c] == ""]
+        if empty:
+            row, col = random.choice(empty)
+            self.make_move(row, col)
+
+    def computer_move_medium(self):
+        # Win if possible
         for row in range(3):
             for col in range(3):
                 if self.board[row][col] == "":
@@ -125,7 +167,7 @@ class TicTacToe:
                         return
                     self.board[row][col] = ""
         
-        # Block player
+        # Block player win
         for row in range(3):
             for col in range(3):
                 if self.board[row][col] == "":
@@ -136,16 +178,65 @@ class TicTacToe:
                         return
                     self.board[row][col] = ""
         
-        # Take center if available
+        # Take center
         if self.board[1][1] == "":
             self.make_move(1, 1)
             return
             
         # Random move
-        empty = [(r, c) for r in range(3) for c in range(3) if self.board[r][c] == ""]
-        if empty:
-            row, col = random.choice(empty)
-            self.make_move(row, col)
+        self.computer_move_easy()
+
+    def computer_move_hard(self):
+        best_move = self.get_best_move()
+        if best_move:
+            self.make_move(best_move[0], best_move[1])
+
+    def get_best_move(self):
+        best_score = -float('inf')
+        best_move = None
+        for row in range(3):
+            for col in range(3):
+                if self.board[row][col] == "":
+                    self.board[row][col] = "O"
+                    score = self.minimax(False)
+                    self.board[row][col] = ""
+                    if score > best_score:
+                        best_score = score
+                        best_move = (row, col)
+        return best_move
+
+    def minimax(self, is_maximizing):
+        winner = self.get_winner()
+        if winner == "O": return 1
+        if winner == "X": return -1
+        if self.is_tie(): return 0
+
+        if is_maximizing:
+            best_score = -float('inf')
+            for row in range(3):
+                for col in range(3):
+                    if self.board[row][col] == "":
+                        self.board[row][col] = "O"
+                        score = self.minimax(False)
+                        self.board[row][col] = ""
+                        best_score = max(score, best_score)
+            return best_score
+        else:
+            best_score = float('inf')
+            for row in range(3):
+                for col in range(3):
+                    if self.board[row][col] == "":
+                        self.board[row][col] = "X"
+                        score = self.minimax(True)
+                        self.board[row][col] = ""
+                        best_score = min(score, best_score)
+            return best_score
+
+    def get_winner(self):
+        winner_cells = self.check_winner()
+        if winner_cells:
+            return self.board[winner_cells[0][0]][winner_cells[0][1]]
+        return None
 
     def check_winner(self):
         # Check rows
@@ -167,25 +258,19 @@ class TicTacToe:
         return None
 
     def is_tie(self):
-        # Check if all cells are filled
-        for row in range(3):
-            for col in range(3):
-                if self.board[row][col] == "":
-                    return False
-        return True
+        return all(cell != "" for row in self.board for cell in row)
 
     def handle_win(self, winner_cells):
         self.highlight_winner(winner_cells)
-        winner_symbol = self.board[winner_cells[0][0]][winner_cells[0][1]]
-        if winner_symbol == "X":
+        winner = self.board[winner_cells[0][0]][winner_cells[0][1]]
+        if winner == "X":
             self.x_wins += 1
             self.x_score.config(text=f"X: {self.x_wins}")
         else:
             self.o_wins += 1
             self.o_score.config(text=f"O: {self.o_wins}")
         
-        # Add a small delay before showing message
-        self.root.after(100, lambda: messagebox.showinfo("Game Over", f"Player {winner_symbol} wins!"))
+        self.root.after(100, lambda: messagebox.showinfo("Game Over", f"Player {winner} wins!"))
         self.root.after(200, self.reset_game)
 
     def handle_tie(self):
@@ -195,32 +280,42 @@ class TicTacToe:
         self.root.after(200, self.reset_game)
 
     def highlight_winner(self, winner_cells):
-        color = random.choice(self.current_theme['highlight_colors'])
-        for row, col in winner_cells:
-            self.buttons[row][col].config(bg=color)
+        color1, color2 = self.current_theme['highlight_colors'][:2]
+        self.pulse_winner_cells(winner_cells, color1, color2)
+
+    def pulse_winner_cells(self, cells, color1, color2, count=0):
+        if count >= 4:
+            for row, col in cells:
+                self.buttons[row][col].config(bg=self.current_theme['button_bg'])
+            return
+        current_color = color1 if count % 2 == 0 else color2
+        for row, col in cells:
+            self.buttons[row][col].config(bg=current_color)
+        self.root.after(200, lambda: self.pulse_winner_cells(cells, color1, color2, count + 1))
 
     def reset_game(self):
         self.current_player = "X"
         self.board = [["" for _ in range(3)] for _ in range(3)]
         for row in range(3):
             for col in range(3):
-                self.buttons[row][col].config(
-                    text="", 
-                    bg=self.current_theme['button_bg']
-                )
-        self.update_turn_label()
+                self.buttons[row][col].config(text="", bg=self.current_theme['button_bg'])
+        self.toggle_buttons_state(tk.NORMAL)
+        self.animate_turn_label()
 
-    def reset_scores(self):
-        self.x_wins = self.o_wins = self.ties = 0
-        self.x_score.config(text="X: 0")
-        self.o_score.config(text="O: 0")
-        self.tie_score.config(text="Ties: 0")
+    def toggle_buttons_state(self, state):
+        for row in self.buttons:
+            for btn in row:
+                btn.config(state=state)
 
     def set_game_mode(self, two_player):
         self.two_player = two_player
         self.reset_game()
-        mode_text = "Two Player" if two_player else "Single Player"
-        messagebox.showinfo("Game Mode", f"Changed to {mode_text} mode")
+        mode = "Two Player" if two_player else "Single Player"
+        messagebox.showinfo("Game Mode", f"Changed to {mode} mode")
+
+    def set_difficulty(self, difficulty):
+        self.difficulty = difficulty
+        messagebox.showinfo("Difficulty", f"Difficulty set to {difficulty.capitalize()}")
 
     def set_theme(self, theme_name):
         themes = {
@@ -228,28 +323,41 @@ class TicTacToe:
                 'bg': '#f0f0f0',
                 'button_bg': '#ffffff',
                 'button_fg': '#000000',
-                'active_bg': '#e0e0e0',
+                'hover_bg': '#e0e0e0',
+                'active_bg': '#b3e5fc',
                 'text_bg': '#f0f0f0',
                 'text_fg': '#000000',
-                'highlight_colors': ['#c8e6c9', '#bbdefb', '#ffcdd2', '#fff9c4']
+                'highlight_colors': ['#c8e6c9', '#bbdefb']
             },
             'dark': {
                 'bg': '#2d2d2d',
                 'button_bg': '#404040',
                 'button_fg': '#ffffff',
-                'active_bg': '#606060',
+                'hover_bg': '#505050',
+                'active_bg': '#607d8b',
                 'text_bg': '#2d2d2d',
                 'text_fg': '#ffffff',
-                'highlight_colors': ['#4a635d', '#3d4d6e', '#634a4a', '#6e6e3d']
+                'highlight_colors': ['#4a635d', '#3d4d6e']
             },
             'ocean': {
                 'bg': '#e0f7fa',
                 'button_bg': '#b2ebf2',
                 'button_fg': '#006064',
-                'active_bg': '#80deea',
+                'hover_bg': '#80deea',
+                'active_bg': '#4dd0e1',
                 'text_bg': '#e0f7fa',
                 'text_fg': '#006064',
-                'highlight_colors': ['#a5d6a7', '#90caf9', '#ef9a9a', '#fff59d']
+                'highlight_colors': ['#a5d6a7', '#90caf9']
+            },
+            'sunset': {
+                'bg': '#fff3e0',
+                'button_bg': '#ffccbc',
+                'button_fg': '#bf360c',
+                'hover_bg': '#ffab91',
+                'active_bg': '#ff8a65',
+                'text_bg': '#fff3e0',
+                'text_fg': '#bf360c',
+                'highlight_colors': ['#ffcdd2', '#ffcc80']
             }
         }
         self.current_theme = themes[theme_name]
@@ -277,21 +385,35 @@ class TicTacToe:
                     activebackground=self.current_theme['active_bg']
                 )
 
-    def update_turn_label(self):
+    def animate_turn_label(self):
         text = f"Player {self.current_player}'s turn"
         if not self.two_player and self.current_player == "O":
             text = "Computer's turn"
-        self.turn_label.config(text=text)
+        
+        # Flash animation
+        colors = [self.current_theme['text_fg'], self.current_theme['active_bg']]
+        for i in range(4):
+            self.turn_label.config(fg=colors[i % 2])
+            self.root.update()
+            self.root.after(100)
+        self.turn_label.config(text=text, fg=self.current_theme['text_fg'])
+
+    def reset_scores(self):
+        self.x_wins = self.o_wins = self.ties = 0
+        self.x_score.config(text="X: 0")
+        self.o_score.config(text="O: 0")
+        self.tie_score.config(text="Ties: 0")
 
     def show_help(self):
         messagebox.showinfo("How to Play",
             "1. Click a square to place your mark (X)\n"
             "2. Try to get 3 in a row to win\n"
-            "3. In single player mode, play against the computer\n"
-            "4. Choose different themes from the menu")
+            "3. Choose difficulty in single player mode\n"
+            "4. Select themes from the menu\n"
+            "5. Computer's turn is automated in single player")
 
     def show_about(self):
-        messagebox.showinfo("About", "Tic Tac Toe Enhanced\nVersion 2.0")
+        messagebox.showinfo("About", "Tic Tac Toe++\nEnhanced Version 3.0\nWith Animations & AI")
 
 if __name__ == "__main__":
     root = tk.Tk()
