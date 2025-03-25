@@ -1,48 +1,51 @@
-# 🐍 Python Projects Hub
+# 🐍 Python Projects Galaxy ✨
 
-![Python Version](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)
-![Last Commit](https://img.shields.io/github/last-commit/GauravKanwasi/python)
-![License](https://img.shields.io/badge/License-MIT-success)
+<div align="center">
 
-**A collection of Python scripts and applications** ranging from beginner-friendly programs to intermediate-level utilities. Perfect for learning Python fundamentals and practical implementations!
+[![GitHub Stars](https://img.shields.io/github/stars/GauravKanwasi/python?style=for-the-badge)](https://github.com/GauravKanwasi/python/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/GauravKanwasi/python?style=for-the-badge)](https://github.com/GauravKanwasi/python/commits/main)
+[![License](https://img.shields.io/github/license/GauravKanwasi/python?style=for-the-badge)](https://github.com/GauravKanwasi/python/blob/main/LICENSE)
 
-[![Projects Preview](![image](https://github.com/user-attachments/assets/4e5fafdf-b83b-49ce-83f4-5e657b659876)
-)
+</div>
+
+![Banner](https://via.placeholder.com/1280x400.png?text=Python+Projects+Showcase+-+Add+Your+Screenshots+Here)
+
+## 🌟 Table of Contents
+- [🚀 Featured Projects](#-featured-projects)
+- [⚡ Quick Start](#-quick-start)
+- [🛠️ Development Toolkit](#%EF%B8%8F-development-toolkit)
+- [🧩 Project Showcase](#-project-showcase)
+- [🤝 Contribution Guide](#-contribution-guide)
+- [📜 License](#-license)
 
 ## 🚀 Featured Projects
 
-### 🎮 Games & Entertainment
-| Project | Description | File |
-|---------|-------------|------|
-| Space Invaders | Classic arcade game remake | [space_invaders.py](https://github.com/GauravKanwasi/python/blob/main/space%20invaders.py) |
-| Tic Tac Toe | Terminal-based multiplayer game | [tic_tac_toe.py](https://github.com/GauravKanwasi/python/blob/main/tic%20tac%20toe.py) |
-| Adventure Game | Text-based RPG experience | [adventure_game.py](https://github.com/GauravKanwasi/python/blob/main/adventure%20game.py) |
+<details>
+<summary><b>🎮 Games & Entertainment (Click to Expand)</b></summary>
 
-### ⚙️ Productivity Tools
-| Project | Description | File |
-|---------|-------------|------|
-| File Organizer | Automated directory manager | [file_organizer.py](https://github.com/GauravKanwasi/python/blob/main/file%20organizer.py) |
-| Secure Password Generator | Military-grade password creator | [Secure_Password_Generator.py](https://github.com/GauravKanwasi/python/blob/main/Secure%20Password%20Generator.py) |
-| QR Code Generator | Custom QR code designer | [QR_Code_Generator.py](https://github.com/GauravKanwasi/python/blob/main/QR%20Code%20Generator.py) |
+| Project | Live Demo | Description | Tech Stack |
+|---------|-----------|-------------|------------|
+| [Space Invaders](space%20invaders.py) | [Play Online](https://replit.com/@GauravKanwasi/Space-Invaders) | Modern arcade game remake | ![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Pygame](https://img.shields.io/badge/Pygame-EE4B2B) |
+| [Tic Tac Toe](tic%20tac%20toe.py) | [Terminal Demo](https://replit.com/@GauravKanwasi/Tic-Tac-Toe) | AI-powered strategy game | ![Rich](https://img.shields.io/badge/RichTerminal-FFD43B) |
+| [Text Adventure](adventure%20game.py) | [Start Story](https://replit.com/@GauravKanwasi/Text-Adventure) | Interactive fiction game | ![Colorama](https://img.shields.io/badge/Colorama-44B12B) |
 
-### 📚 Learning Projects
-| Project | Description | File |
-|---------|-------------|------|
-| Fibonacci Generator | Multiple algorithm implementations | [Fibonacci_Generator.py](https://github.com/GauravKanwasi/python/blob/main/Fibonacci%20Sequence%20Generator.py) |
-| Prime Number Checker | Efficient prime verification | [Prime_Checker.py](https://github.com/GauravKanwasi/python/blob/main/Prime%20Number%20Checker.py) |
-| Turtle Graphics | Geometric pattern generator | [Turtle_Graphics.py](https://github.com/GauravKanwasi/python/blob/main/Turtle%20Graphics.py) |
+</details>
 
-## 🛠️ Tech Stack
-- **Core Language**: Python 3.8+
-- **Key Libraries**: 
-  ![Pygame](https://img.shields.io/badge/-Pygame-black)
-  ![qrcode](https://img.shields.io/badge/-qrcode-blue)
-  ![Cryptography](https://img.shields.io/badge/-Cryptography-brightgreen)
-  ![Turtle](https://img.shields.io/badge/-TurtleGraphics-lightblue)
+<details>
+<summary><b>⚙️ Productivity Tools (Click to Expand)</b></summary>
+
+| Project | Quick Command | Description | Tech Stack |
+|---------|---------------|-------------|------------|
+| [File Organizer](file%20organizer.py) | `python "file organizer.py" ~/Downloads` | Smart file manager | ![Watchdog](https://img.shields.io/badge/Watchdog-FFD43B) |
+| [Password Generator](Secure%20Password%20Generator.py) | `python "Secure Password Generator.py" -l 20` | Cryptographic security tool | ![Secrets](https://img.shields.io/badge/Secrets-013243) |
+| [QR Generator](QR%20Code%20Generator.py) | `python "QR Code Generator.py" "Hello World"` | Custom QR code creator | ![qrcode](https://img.shields.io/badge/qrcode-1.0-blue) |
+
+</details>
 
 ## ⚡ Quick Start
 
-1. **Clone Repository**
+### 🐧 Linux/macOS
 ```bash
 git clone https://github.com/GauravKanwasi/python.git
-cd python
+cd python && python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
