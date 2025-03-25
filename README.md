@@ -1,13 +1,13 @@
 # 🐍 Python Projects Hub
 
-![Python Version](![image](https://github.com/user-attachments/assets/cf731706-2cd8-4acd-a751-9531bde80ebb)
-)
+![Python Version](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)
 ![Last Commit](https://img.shields.io/github/last-commit/GauravKanwasi/python)
 ![License](https://img.shields.io/badge/License-MIT-success)
 
 **A collection of Python scripts and applications** ranging from beginner-friendly programs to intermediate-level utilities. Perfect for learning Python fundamentals and practical implementations!
 
-[![Projects Preview](https://via.placeholder.com/800x400.png?text=Python+Projects+Showcase)](https://github.com/GauravKanwasi/python/tree/main)
+[![Projects Preview](![image](https://github.com/user-attachments/assets/4e5fafdf-b83b-49ce-83f4-5e657b659876)
+)
 
 ## 🚀 Featured Projects
 
