@@ -1,7 +1,9 @@
 import pygame
 import random
 import os
+import math
 
+# Initialize Pygame
 pygame.init()
 pygame.mixer.init()
 
@@ -18,44 +20,48 @@ COLORS = {
 
 # Game settings
 BALL_RADIUS = 15
-INITIAL_BALL_SPEED = 5
 PADDLE_WIDTH = 100
 PADDLE_HEIGHT = 20
-PADDLE_SPEED = 10
 BALL_SPEED_INCREASE = 1.05
-MAX_BALL_SPEED = 12
+MAX_BALL_SPEED = 800  # pixels per second
 
+# Dummy sound class for fallback
 class DummySound:
-    def play(self): pass
+    def play(self):
+        pass
 
+# Ball class
 class Ball:
     def __init__(self):
-        self.reset()
-        self.color = COLORS["RED"]
         self.radius = BALL_RADIUS
+        self.color = COLORS["RED"]
         self.trail = []
+        self.reset()
 
     def reset(self):
-        self.x = random.randint(BALL_RADIUS, SCREEN_WIDTH - BALL_RADIUS)
+        self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
-        self.dx = random.choice([-INITIAL_BALL_SPEED, INITIAL_BALL_SPEED])
-        self.dy = -INITIAL_BALL_SPEED
+        initial_speed = 300  # pixels per second
+        angle = random.uniform(-30, 30) * (math.pi / 180)  # Random angle in radians
+        self.dx = initial_speed * math.sin(angle)
+        self.dy = -initial_speed * math.cos(angle)
         self.active = True
+        self.trail = []
 
-    def update(self):
+    def update(self, delta_time):
         if self.active:
-            self.x += self.dx
-            self.y += self.dy
-            self.trail.append((self.x, self.y))
+            self.x += self.dx * delta_time
+            self.y += self.dy * delta_time
+            self.trail.append((int(self.x), int(self.y)))
             if len(self.trail) > 5:
                 self.trail.pop(0)
 
     def draw(self, surface):
         for i, pos in enumerate(self.trail):
-            alpha = 255 - i * 50
-            pygame.draw.circle(surface, (255, 0, 0, alpha), pos, self.radius - i)
-        pygame.draw.circle(surface, self.color, (self.x, self.y), self.radius)
+            pygame.draw.circle(surface, self.color, pos, self.radius - i)
+        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
 
+# Paddle class
 class Paddle:
     def __init__(self):
         self.width = PADDLE_WIDTH
@@ -63,17 +69,18 @@ class Paddle:
         self.x = SCREEN_WIDTH // 2 - self.width // 2
         self.y = SCREEN_HEIGHT - self.height - 20
         self.color = COLORS["BLUE"]
-        self.speed = PADDLE_SPEED
+        self.speed = 600  # pixels per second
         self.dx = 0
 
-    def update(self):
-        self.x += self.dx
+    def update(self, delta_time):
+        self.x += self.dx * delta_time
         self.x = max(0, min(self.x, SCREEN_WIDTH - self.width))
 
     def draw(self, surface):
         pygame.draw.rect(surface, self.color, (self.x, self.y, self.width, self.height))
         pygame.draw.rect(surface, COLORS["BLACK"], (self.x, self.y, self.width, self.height), 2)
 
+# Game class
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -87,14 +94,14 @@ class Game:
         self.score = 0
         self.game_active = True
         
-        # Sound handling
+        # Load sounds with fallback
         self.sounds = {
             "bounce": self.load_sound("bounce.wav"),
             "score": self.load_sound("score.wav"),
             "game_over": self.load_sound("game_over.wav")
         }
         
-        # Background music handling
+        # Background music
         if os.path.exists("background_music.mp3"):
             pygame.mixer.music.load("background_music.mp3")
             pygame.mixer.music.play(-1)
@@ -124,7 +131,6 @@ class Game:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-            
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
                     self.paddle.dx = -self.paddle.speed
@@ -134,7 +140,6 @@ class Game:
                     self.game_active = True
                     self.ball.reset()
                     self.score = 0
-            
             if event.type == pygame.KEYUP:
                 if event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                     self.paddle.dx = 0
@@ -142,29 +147,31 @@ class Game:
     def check_collisions(self):
         # Wall collisions
         if self.ball.x <= BALL_RADIUS or self.ball.x >= SCREEN_WIDTH - BALL_RADIUS:
-            self.ball.dx *= -1
+            self.ball.dx = -self.ball.dx
             self.sounds["bounce"].play()
-
         if self.ball.y <= BALL_RADIUS:
-            self.ball.dy *= -1
+            self.ball.dy = -self.ball.dy
             self.sounds["bounce"].play()
 
         # Paddle collision
         paddle_rect = pygame.Rect(self.paddle.x, self.paddle.y, self.paddle.width, self.paddle.height)
-        ball_rect = pygame.Rect(self.ball.x - BALL_RADIUS, self.ball.y - BALL_RADIUS, BALL_RADIUS*2, BALL_RADIUS*2)
+        ball_rect = pygame.Rect(self.ball.x - BALL_RADIUS, self.ball.y - BALL_RADIUS, BALL_RADIUS * 2, BALL_RADIUS * 2)
         
         if ball_rect.colliderect(paddle_rect) and self.ball.dy > 0:
-            self.ball.dy *= -1
+            self.ball.dy = -self.ball.dy
+            hit_pos = (self.ball.x - self.paddle.x) / self.paddle.width - 0.5  # -0.5 to 0.5
+            self.ball.dx += hit_pos * 100  # Horizontal influence
+            # Increase and cap speed
+            current_speed = (self.ball.dx ** 2 + self.ball.dy ** 2) ** 0.5
+            new_speed = min(current_speed * BALL_SPEED_INCREASE, MAX_BALL_SPEED)
+            if current_speed > 0:
+                scale = new_speed / current_speed
+                self.ball.dx *= scale
+                self.ball.dy *= scale
             self.score += 1
-            self.ball.dx = min(max(self.ball.dx * BALL_SPEED_INCREASE, -MAX_BALL_SPEED), MAX_BALL_SPEED)
-            self.ball.dy = min(max(self.ball.dy * BALL_SPEED_INCREASE, -MAX_BALL_SPEED), MAX_BALL_SPEED)
-            
-            # Add directional influence
-            hit_pos = (self.ball.x - self.paddle.x) / self.paddle.width
-            self.ball.dx += hit_pos * 3
             self.sounds["score"].play()
 
-        # Bottom screen collision
+        # Game over condition
         if self.ball.y > SCREEN_HEIGHT:
             self.sounds["game_over"].play()
             self.save_high_score()
@@ -172,25 +179,26 @@ class Game:
 
     def draw_game_over(self):
         text = self.font.render(f"Game Over! Score: {self.score}", True, COLORS["BLACK"])
-        text_rect = text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
+        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
         self.screen.blit(text, text_rect)
 
         high_score_text = self.font.render(f"High Score: {max(self.score, self.high_score)}", True, COLORS["BLACK"])
-        hs_rect = high_score_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+        hs_rect = high_score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         self.screen.blit(high_score_text, hs_rect)
 
         restart_text = self.font.render("Press SPACE to Restart", True, COLORS["BLUE"])
-        restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 50))
+        restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
         self.screen.blit(restart_text, restart_rect)
 
     def run(self):
         while True:
+            delta_time = self.clock.tick(FPS) / 1000.0  # Time in seconds
             self.handle_events()
             self.screen.fill(COLORS["WHITE"])
 
             if self.game_active:
-                self.paddle.update()
-                self.ball.update()
+                self.paddle.update(delta_time)
+                self.ball.update(delta_time)
                 self.check_collisions()
 
                 self.ball.draw(self.screen)
@@ -206,7 +214,6 @@ class Game:
 
             pygame.draw.rect(self.screen, COLORS["BLACK"], (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), 5)
             pygame.display.flip()
-            self.clock.tick(FPS)
 
 if __name__ == "__main__":
     game = Game()
