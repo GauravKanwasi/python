@@ -1,11 +1,16 @@
-mport random
+import random
 import tkinter as tk
 from tkinter import ttk, messagebox
 import webbrowser
 from PIL import Image, ImageTk
-import requests
-from io import BytesIO
 import sqlite3
+import os
+from playsound import playsound
+
+# Define media directories
+IMAGE_DIR = "media/images"
+SOUND_DIR = "media/sounds"
+VIDEO_DIR = "media/videos"
 
 class AnimalSoundExplorer:
     def __init__(self, root):
@@ -16,6 +21,9 @@ class AnimalSoundExplorer:
         # Database setup
         self.conn = sqlite3.connect('animal_db.sqlite')
         self.create_tables()
+        
+        # Initialize animal IDs list
+        self.animal_ids = []
         
         # GUI components
         self.create_widgets()
@@ -31,8 +39,8 @@ class AnimalSoundExplorer:
     def create_tables(self):
         cursor = self.conn.cursor()
         cursor.execute('''CREATE TABLE IF NOT EXISTS animals
-            (id INTEGER PRIMARY KEY, name TEXT, sound TEXT, 
-             image_url TEXT, video_url TEXT, clicks INTEGER)''')
+            (id INTEGER PRIMARY KEY, name TEXT, sound_file TEXT, 
+             image_file TEXT, video_file TEXT, clicks INTEGER)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS favorites
             (id INTEGER PRIMARY KEY, animal_id INTEGER)''')
         self.conn.commit()
@@ -70,8 +78,7 @@ class AnimalSoundExplorer:
         self.name_label = ttk.Label(info_frame, font=('Arial', 14))
         self.name_label.pack(side=tk.LEFT, padx=10)
         
-        self.sound_label = ttk.Label(right_panel, font=('Arial', 12))
-        self.sound_label.pack(pady=5)
+        # Removed sound_label since we now play actual sounds
         
         button_frame = ttk.Frame(right_panel)
         button_frame.pack(pady=20)
@@ -90,19 +97,22 @@ class AnimalSoundExplorer:
     
     def load_animals(self):
         animals = [
-            {"name": "Mongoose", "sound": "Squeak-squeak-bite!", 
-             "image": "https://example.com/mongoose.jpg",
-             "video": "https://youtube.com/watch?v=Wk_3BdXgQ5U"},
-            # Add other animals with image/video URLs
+            {"name": "Mongoose", "sound_file": "mongoose.mp3", 
+             "image_file": "mongoose.jpg", "video_file": "mongoose.mp4"},
+            {"name": "Elephant", "sound_file": "elephant.mp3", 
+             "image_file": "elephant.jpg", "video_file": "elephant.mp4"},
+            {"name": "Lion", "sound_file": "lion.mp3", 
+             "image_file": "lion.jpg", "video_file": "lion.mp4"},
+            # Add more animals as needed
         ]
         
         cursor = self.conn.cursor()
         for animal in animals:
             cursor.execute('''INSERT OR IGNORE INTO animals 
-                            (name, sound, image_url, video_url, clicks)
+                            (name, sound_file, image_file, video_file, clicks)
                             VALUES (?, ?, ?, ?, 0)''',
-                         (animal['name'], animal['sound'], 
-                          animal['image'], animal['video']))
+                         (animal['name'], animal['sound_file'], 
+                          animal['image_file'], animal['video_file']))
         self.conn.commit()
         self.search_animals()
     
@@ -113,25 +123,29 @@ class AnimalSoundExplorer:
                         WHERE name LIKE ? ORDER BY clicks DESC''',
                      (f'%{query}%',))
         self.animal_list.delete(0, tk.END)
+        self.animal_ids = []
         for row in cursor.fetchall():
-            self.animal_list.insert(tk.END, row[1], row[0])
+            self.animal_list.insert(tk.END, row[1])
+            self.animal_ids.append(row[0])
     
     def show_animal_details(self, event):
         selection = self.animal_list.curselection()
         if selection:
-            animal_id = self.animal_list.get(selection[0], selection[0])[0]
+            index = selection[0]
+            animal_id = self.animal_ids[index]
             cursor = self.conn.cursor()
             cursor.execute('''SELECT * FROM animals WHERE id=?''', (animal_id,))
             self.current_animal = cursor.fetchone()
             
             # Update display
             self.name_label.config(text=self.current_animal[1])
-            self.sound_label.config(text=self.current_animal[2])
             
             # Load image
+            image_path = os.path.join(IMAGE_DIR, self.current_animal[3])
+            if not os.path.exists(image_path):
+                image_path = os.path.join(IMAGE_DIR, "no_image.jpg")
             try:
-                response = requests.get(self.current_animal[3])
-                image = Image.open(BytesIO(response.content))
+                image = Image.open(image_path)
                 image.thumbnail((600, 400))
                 photo = ImageTk.PhotoImage(image)
                 self.image_label.config(image=photo)
@@ -150,13 +164,23 @@ class AnimalSoundExplorer:
             self.fav_button.config(text="★ Unfavorite" if cursor.fetchone() else "☆ Favorite")
     
     def play_sound(self):
-        # Implement actual sound playback using pygame
-        messagebox.showinfo("Coming Soon", 
-                          "Sound playback feature in development!")
+        if self.current_animal:
+            sound_path = os.path.join(SOUND_DIR, self.current_animal[2])
+            if os.path.exists(sound_path):
+                try:
+                    playsound(sound_path)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Could not play sound: {str(e)}")
+            else:
+                messagebox.showerror("Error", "Sound file not found.")
     
     def open_video(self):
         if self.current_animal:
-            webbrowser.open(self.current_animal[4])
+            video_path = os.path.join(VIDEO_DIR, self.current_animal[4])
+            if os.path.exists(video_path):
+                webbrowser.open(video_path)
+            else:
+                messagebox.showerror("Error", "Video file not found.")
     
     def toggle_favorite(self):
         if self.current_animal:
@@ -174,12 +198,14 @@ class AnimalSoundExplorer:
             self.conn.commit()
     
     def show_random_animal(self):
-        cursor = self.conn.cursor()
-        cursor.execute('''SELECT id FROM animals ORDER BY RANDOM() LIMIT 1''')
-        random_id = cursor.fetchone()[0]
-        self.animal_list.selection_clear(0, tk.END)
-        self.animal_list.selection_set(random_id)
-        self.show_animal_details(None)
+        if self.animal_ids:
+            index = random.randint(0, len(self.animal_ids) - 1)
+            self.animal_list.selection_clear(0, tk.END)
+            self.animal_list.selection_set(index)
+            self.animal_list.see(index)
+            self.show_animal_details(None)
+        else:
+            self.status.config(text="No animals to select.")
 
 if __name__ == "__main__":
     root = tk.Tk()
