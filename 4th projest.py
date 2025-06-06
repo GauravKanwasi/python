@@ -18,64 +18,107 @@ data = {
 # Convert to DataFrame
 df = pd.DataFrame(data)
 
-# Display the first few rows of the data
+# --- Data Exploration ---
+print("\n=== Data Overview ===")
+print("First 5 rows of the dataset:")
 print(df.head())
+print("\nDataset Statistics:")
+print(df.describe())
 
 # Features (X) and Target (y)
-X = df[['StudyHours', 'PrevExamScore']]  # Features
-y = df['Pass']  # Target variable (0 = Fail, 1 = Pass)
+X = df[['StudyHours', 'PrevExamScore']]
+y = df['Pass']
 
 # Split data into 80% training and 20% testing
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-print(f"Training data: {X_train.shape}, {y_train.shape}")
-print(f"Testing data: {X_test.shape}, {y_test.shape}")
+print(f"\nTraining data size: {X_train.shape[0]} samples")
+print(f"Testing data size: {X_test.shape[0]} samples")
 
-# Initialize the Logistic Regression model
+# --- Train Logistic Regression Model ---
 logreg_model = LogisticRegression()
-
-# Train the Logistic Regression model
 logreg_model.fit(X_train, y_train)
-
-# Make predictions using the test set
 y_pred_logreg = logreg_model.predict(X_test)
-
-# Evaluate the Logistic Regression model
 accuracy_logreg = accuracy_score(y_test, y_pred_logreg)
-print(f"Logistic Regression Accuracy: {accuracy_logreg}")
 
-# Initialize the Decision Tree Classifier
-tree_model = DecisionTreeClassifier(random_state=42)
-
-# Train the Decision Tree model
+# --- Train Decision Tree Model ---
+tree_model = DecisionTreeClassifier(random_state=42, max_depth=3)  # Limit depth for better visualization
 tree_model.fit(X_train, y_train)
-
-# Make predictions using the test set
 y_pred_tree = tree_model.predict(X_test)
-
-# Evaluate the Decision Tree model
 accuracy_tree = accuracy_score(y_test, y_pred_tree)
-print(f"Decision Tree Accuracy: {accuracy_tree}")
 
-# Evaluate Logistic Regression
-print("Logistic Regression:")
-print(f"Accuracy: {accuracy_logreg}")
+# --- Model Evaluation ---
+print("\n=== Model Evaluation ===")
+print("\nLogistic Regression:")
+print(f"Accuracy: {accuracy_logreg:.2f}")
 print("Confusion Matrix:")
 print(confusion_matrix(y_test, y_pred_logreg))
 print("Classification Report:")
 print(classification_report(y_test, y_pred_logreg))
 
-# Evaluate Decision Tree
-print("Decision Tree:")
-print(f"Accuracy: {accuracy_tree}")
+print("\nDecision Tree:")
+print(f"Accuracy: {accuracy_tree:.2f}")
 print("Confusion Matrix:")
 print(confusion_matrix(y_test, y_pred_tree))
 print("Classification Report:")
 print(classification_report(y_test, y_pred_tree))
 
-# Visualize the decision tree
-plt.figure(figsize=(12,8))
-tree.plot_tree(tree_model, feature_names=['StudyHours', 'PrevExamScore'], class_names=['Fail', 'Pass'], filled=True)
-plt.title('Decision Tree for Classifying Pass/Fail')
+# --- Visualize Decision Tree ---
+plt.figure(figsize=(12, 8))
+tree.plot_tree(tree_model, feature_names=['StudyHours', 'PrevExamScore'], 
+               class_names=['Fail', 'Pass'], filled=True, rounded=True)
+plt.title("Decision Tree for Pass/Fail Classification")
 plt.show()
 
+# --- Interactive Prediction Loop ---
+def predict_pass_fail():
+    print("\n=== Interactive Prediction ===")
+    print("Enter student data to predict if they will pass or fail.")
+    print("Type 'exit' to stop.\n")
+    
+    while True:
+        try:
+            user_input = input("Enter study hours (or 'exit' to quit): ")
+            if user_input.lower() == 'exit':
+                break
+                
+            study_hours = float(user_input)
+            prev_exam_score = float(input("Enter previous exam score: "))
+            
+            # Validate input ranges
+            if study_hours < 0 or prev_exam_score < 0 or prev_exam_score > 100:
+                print("Error: Study hours must be non-negative, and exam score must be between 0 and 100.")
+                continue
+            
+            # Create DataFrame for new data
+            new_data = pd.DataFrame([[study_hours, prev_exam_score]], 
+                                  columns=['StudyHours', 'PrevExamScore'])
+            
+            # Predictions
+            logreg_pred = logreg_model.predict(new_data)[0]
+            tree_pred = tree_model.predict(new_data)[0]
+            
+            # Display results
+            print("\nPredictions:")
+            print(f"Logistic Regression: {'Pass' if logreg_pred == 1 else 'Fail'}")
+            print(f"Decision Tree: {'Pass' if tree_pred == 1 else 'Fail'}")
+            print("-" * 40)
+            
+        except ValueError:
+            print("Error: Please enter valid numerical values.")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+# --- Model Comparison ---
+print("\n=== Model Comparison ===")
+print(f"Logistic Regression Accuracy: {accuracy_logreg:.2f}")
+print(f"Decision Tree Accuracy: {accuracy_tree:.2f}")
+if accuracy_logreg > accuracy_tree:
+    print("Logistic Regression performs better on the test data.")
+elif accuracy_tree > accuracy_logreg:
+    print("Decision Tree performs better on the test data.")
+else:
+    print("Both models perform equally well on the test data.")
+
+# Run the interactive prediction
+predict_pass_fail()
