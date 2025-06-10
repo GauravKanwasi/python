@@ -13,7 +13,7 @@ class TextAdventureGame:
         self.rooms = {
             "entrance": {
                 "description": "You stand at the entrance of a mysterious dungeon. Torches flicker on the walls.",
-                "exits": {"north": "hallway", "east": "armory"},
+                "exits": {"north": "hallway", "east": "armory", "south": "outside"},
                 "items": ["torch"]
             },
             "hallway": {
@@ -29,7 +29,7 @@ class TextAdventureGame:
             "library": {
                 "description": "Dusty bookshelves line the walls. A magical scroll radiates power.",
                 "exits": {"west": "hallway", "south": "armory", "east": "monster_room"},
-                "items": ["magic_scroll"]
+                "items": ["magic_scroll", "healing_potion"]
             },
             "treasure_room": {
                 "description": "Piles of gold and jewels glitter before you. The treasure is yours!",
@@ -41,6 +41,11 @@ class TextAdventureGame:
                 "exits": {"west": "library"},
                 "items": ["dragon_scale"],
                 "monster": "dragon"
+            },
+            "outside": {
+                "description": "You are outside the dungeon. Fresh air fills your lungs.",
+                "exits": {},
+                "items": []
             }
         }
         
@@ -51,8 +56,9 @@ class TextAdventureGame:
             "magic_scroll": "A scroll with dragon-banishment runes. It pulses with magical energy.",
             "gold_coin": "A shiny gold coin worth a small fortune.",
             "jewel": "A brilliant gemstone sparkling with inner fire.",
-            "dragon_scale": "A tough scale from a dragon's hide.",
-            "dragon_treasure": "A magnificent hoard left by the vanquished dragon."
+            "dragon_scale": "A tough scale from a dragon’s hide.",
+            "dragon_treasure": "A magnificent hoard left by the vanquished dragon.",
+            "healing_potion": "A potion that restores health."
         }
         
         self.game_over = False
@@ -67,17 +73,18 @@ class TextAdventureGame:
         print("=" * 60)
         print("                   DUNGEON ADVENTURE")
         print("=" * 60)
-        print("\nWelcome brave adventurer! You've entered a mysterious dungeon")
-        print("in search of treasure. Be careful of the dangers that lurk within!")
-        print("\nYour goal is to find the treasure room and escape with valuables.")
-        print("But beware of the dragon!")
+        print("\nWelcome, brave adventurer! You’ve entered a mysterious dungeon")
+        print("in search of treasure. Be wary of the dangers within!")
+        print("\nYour goal is to find treasure and escape the dungeon alive.")
+        print("Beware the dragon guarding its hoard!")
         print("\nCommands:")
-        print("  go [direction]  - Move in a direction (north, south, east, west)")
+        print("  go [direction]  - Move (north, south, east, west)")
         print("  look           - Re-examine your surroundings")
         print("  inventory      - Check your inventory")
         print("  take [item]    - Pick up an item")
         print("  drop [item]    - Drop an item")
         print("  examine [item] - Inspect an item in your inventory")
+        print("  use [item]     - Use an item from your inventory")
         print("  help           - Show available commands")
         print("  quit           - Exit the game")
         print("=" * 60)
@@ -91,9 +98,11 @@ class TextAdventureGame:
         print(f"\n{room['description']}")
         
         if room["items"]:
-            print("\nItems here:", ", ".join(item.replace('_', ' ') for item in room["items"]))
+            items = ", ".join(item.replace('_', ' ') for item in room["items"])
+            print(f"\nYou see {items} here.")
         
-        print("\nExits:", ", ".join(room["exits"].keys()).title() or "None")
+        exits = ", ".join(room["exits"].keys()).title()
+        print("\nYou can go " + (exits if exits else "nowhere from here."))
 
     def get_command(self):
         cmd = input("\nWhat would you like to do? ").strip().lower()
@@ -106,9 +115,8 @@ class TextAdventureGame:
             print(f"You move {direction}.")
             return True
         else:
-            valid_exits = list(current_room["exits"].keys())
-            exits_str = ', '.join(valid_exits) if valid_exits else "none"
-            print(f"Can't go {direction}! Valid exits: {exits_str}.")
+            valid_exits = ', '.join(current_room["exits"].keys()) if current_room["exits"] else "none"
+            print(f"Can’t go {direction}! Valid exits: {valid_exits}.")
             return False
 
     def take_item(self, item_name):
@@ -119,7 +127,7 @@ class TextAdventureGame:
             room["items"].remove(item_name)
             print(f"You take the {item_name.replace('_', ' ')}.")
             return True
-        print(f"No {item_name.replace('_', ' ')} here.")
+        print(f"You don’t see a {item_name.replace('_', ' ')} here.")
         return False
 
     def drop_item(self, item_name):
@@ -129,20 +137,33 @@ class TextAdventureGame:
             self.rooms[self.player["current_room"]]["items"].append(item_name)
             print(f"You drop the {item_name.replace('_', ' ')}.")
         else:
-            print(f"You don't have a {item_name.replace('_', ' ')}.")
+            print(f"You don’t have a {item_name.replace('_', ' ')}.")
 
     def examine_item(self, item_name):
         item_name = item_name.replace(' ', '_')
         if item_name in self.player["inventory"]:
             print(f"{item_name.replace('_', ' ')}: {self.items.get(item_name, 'A mysterious item.')}")
         else:
-            print(f"You don't have a {item_name.replace('_', ' ')}.")
+            print(f"You don’t have a {item_name.replace('_', ' ')}.")
+
+    def use_item(self, item_name):
+        item_name = item_name.replace(' ', '_')
+        if item_name in self.player["inventory"]:
+            if item_name == "healing_potion":
+                self.player["health"] = min(100, self.player["health"] + 50)
+                print("You drink the healing potion and feel invigorated!")
+                self.player["inventory"].remove(item_name)
+            else:
+                print(f"You can’t use the {item_name.replace('_', ' ')}.")
+        else:
+            print(f"You don’t have a {item_name.replace('_', ' ')}.")
 
     def show_inventory(self):
         if self.player["inventory"]:
-            print("Inventory:", ", ".join(item.replace('_', ' ') for item in self.player["inventory"]))
+            items = ", ".join(item.replace('_', ' ') for item in self.player["inventory"])
+            print(f"You are carrying {items}.")
         else:
-            print("Your inventory is empty.")
+            print("You are carrying nothing.")
 
     def check_encounter(self):
         room = self.rooms[self.player["current_room"]]
@@ -155,15 +176,22 @@ class TextAdventureGame:
                 del room["monster"]
                 room["items"].append("dragon_treasure")
             else:
-                print("\nThe dragon's fiery breath engulfs you!")
-                print("Without the sword and scroll, you stand no chance...")
-                self.game_over = True
+                print("\nThe dragon’s fiery breath scorches you!")
+                self.player["health"] -= 50
+                if self.player["health"] <= 0:
+                    print("You succumb to your injuries...")
+                    self.game_over = True
+                else:
+                    print("You barely escape back to the library.")
+                    self.player["current_room"] = "library"
 
     def check_win_condition(self):
-        if (self.player["current_room"] == "treasure_room" and 
-            any(item in self.player["inventory"] for item in ["gold_coin", "jewel"])):
-            self.win = True
+        if self.player["current_room"] == "outside":
             self.game_over = True
+            if any(item in self.player["inventory"] for item in ["gold_coin", "jewel", "dragon_treasure"]):
+                self.win = True
+            else:
+                self.win = False
 
     def show_help(self):
         print("\nCommands:")
@@ -173,6 +201,7 @@ class TextAdventureGame:
         print("take [item]    - Pick up an item")
         print("drop [item]    - Drop an item")
         print("examine [item] - Inspect an item")
+        print("use [item]     - Use an item")
         print("help           - Show this help")
         print("quit           - Exit the game")
 
@@ -190,12 +219,13 @@ class TextAdventureGame:
                     self.check_encounter()
                     self.check_win_condition()
             elif action == "take":
-                if self.take_item(target):
-                    self.check_win_condition()
+                self.take_item(target)
             elif action == "drop":
                 self.drop_item(target)
             elif action == "examine":
                 self.examine_item(target)
+            elif action == "use":
+                self.use_item(target)
             elif action == "inventory":
                 self.show_inventory()
             elif action == "help":
@@ -205,21 +235,20 @@ class TextAdventureGame:
                 self.quit_flag = True
                 self.game_over = True
             elif action == "look":
-                continue  # Room will re-display on next loop
+                continue  # Room re-displays on next loop
             else:
                 print("Invalid command. Type 'help' for options.")
             
             if not self.game_over:
                 input("\nPress Enter to continue...")
         
-        # Final messages
         self.clear_screen()
         if self.quit_flag:
             print("\nYou leave the dungeon, your story untold...")
         elif self.win:
             print("\n*** YOU ESCAPE WITH THE TREASURE! VICTORY IS YOURS! ***")
         else:
-            print("\n~~~ Your adventure ends here. Better luck next time! ~~~")
+            print("\n~~~ You leave the dungeon empty-handed. Better luck next time! ~~~")
         input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
