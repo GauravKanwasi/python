@@ -5,11 +5,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-
-# Function to normalize the data
-def normalize_data(X):
-    scaler = StandardScaler()
-    return scaler.fit_transform(X)
+from sklearn.pipeline import make_pipeline
 
 # Function to get user input for the dataset
 def get_user_input():
@@ -19,42 +15,68 @@ def get_user_input():
     print("Enter your readings. Type 'done' when you are finished.")
     
     while True:
+        speed_input = input("Enter speed (or 'done' to finish): ")
+        if speed_input.lower() == 'done':
+            break
+        distance_input = input("Enter distance (or 'done' to finish): ")
+        if distance_input.lower() == 'done':
+            break
+        
         try:
-            speed = input("Enter speed (or 'done' to finish): ")
-            if speed.lower() == 'done':
-                break
-            distance = input("Enter distance (or 'done' to finish): ")
-            if distance.lower() == 'done':
-                break
-            
-            speeds.append(float(speed))
-            distances.append(float(distance))
+            speed = float(speed_input)
+            distance = float(distance_input)
+            speeds.append(speed)
+            distances.append(distance)
         except ValueError:
-            print("Invalid input. Please enter numerical values for speed and distance.")
+            print("Invalid input. Please enter numerical values for both speed and distance.")
 
-    # Check if there's enough data to proceed
-    if len(speeds) == 0 or len(distances) == 0:
-        print("No data entered. Exiting.")
+    # Validate the data
+    if len(speeds) < 2:
+        print("At least two data points are required.")
+        exit()
+    elif len(set(speeds)) == 1:
+        print("All speeds are the same. Cannot perform linear regression.")
         exit()
 
     data = {'Speed': speeds, 'Distance': distances}
     return pd.DataFrame(data)
 
 # Function to perform cross-validation
-def cross_validate_model(model, X, y):
-    cv_scores = cross_val_score(model, X, y, cv=5, scoring='neg_mean_squared_error')
+def cross_validate_model(pipeline, X, y):
+    cv_scores = cross_val_score(pipeline, X, y, cv=5, scoring='neg_mean_squared_error')
     return np.mean(cv_scores)
 
 # Function to plot evaluation metrics and data
-def plot_results(X_train, y_train, X_test, y_test, y_pred, model):
-    # Plot the training and testing data points
+def plot_results(X_train, y_train, X_test, y_test, y_pred, pipeline):
+    # Extract scaler and model from the pipeline
+    scaler = pipeline.named_steps['standardscaler']
+    model = pipeline.named_steps['linearregression']
+    
+    # Get scaler parameters
+    mean = scaler.mean_[0]
+    std = scaler.scale_[0]
+    
+    # Get model parameters
+    intercept = model.intercept_
+    coef = model.coef_[0]
+    
+    # Convert to original scale
+    original_intercept = intercept - coef * mean / std
+    original_slope = coef / std
+    
+    # Plot data and regression line
     plt.figure(figsize=(12, 6))
     
     plt.subplot(1, 2, 1)
     plt.scatter(X_train, y_train, color='green', label='Training Data')
     plt.scatter(X_test, y_test, color='blue', label='Testing Data')
-    plt.plot(X_test, y_pred, color='red', label='Regression Line')
-    plt.xlabel('Speed (normalized)')
+    
+    # Regression line in original scale
+    x_range = np.linspace(X_test.min(), X_test.max(), 100)
+    y_line = original_intercept + original_slope * x_range
+    plt.plot(x_range, y_line, color='red', label='Regression Line')
+    
+    plt.xlabel('Speed')
     plt.ylabel('Distance')
     plt.title('Car Distance vs. Speed')
     plt.legend()
@@ -64,7 +86,7 @@ def plot_results(X_train, y_train, X_test, y_test, y_pred, model):
     plt.subplot(1, 2, 2)
     plt.scatter(X_test, residuals, color='purple', label='Residuals')
     plt.axhline(y=0, color='black', linestyle='--')
-    plt.xlabel('Speed (normalized)')
+    plt.xlabel('Speed')
     plt.ylabel('Residuals')
     plt.title('Residual Plot')
     plt.legend()
@@ -81,36 +103,27 @@ def run_linear_regression():
     print("Dataset:")
     print(df)
     
-    # Define features (X) and target (y)
+    # Define features and target
     X = df[['Speed']]
     y = df['Distance']
 
-    # Normalize the data
-    X = normalize_data(X)
-
-    # Split the data into training and testing sets
+    # Split the data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Print the shapes of the training and testing sets
+    # Print shapes
     print(f"Training data shape: {X_train.shape}, {y_train.shape}")
     print(f"Testing data shape: {X_test.shape}, {y_test.shape}")
 
-    # Initialize the Linear Regression model
-    model = LinearRegression()
+    # Create and train the pipeline
+    pipeline = make_pipeline(StandardScaler(), LinearRegression())
+    pipeline.fit(X_train, y_train)
 
-    # Train the model on the training data
-    model.fit(X_train, y_train)
-
-    # Print the learned parameters (intercept and coefficient)
-    print(f"Intercept: {model.intercept_}")
-    print(f"Coefficient: {model.coef_[0]}")
-
-    # Make predictions on the testing set
-    y_pred = model.predict(X_test)
+    # Make predictions
+    y_pred = pipeline.predict(X_test)
     print("Predicted Distances:", y_pred)
     print("Actual Distances:", y_test.values)
 
-    # Calculate and print evaluation metrics
+    # Evaluation metrics
     mse = mean_squared_error(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
@@ -121,26 +134,30 @@ def run_linear_regression():
     print(f"Root Mean Squared Error (RMSE): {rmse}")
     print(f"R-squared: {r2}")
 
-    # Perform Cross-Validation
-    cv_score = cross_validate_model(model, X, y)
+    # Cross-validation
+    cv_score = cross_validate_model(pipeline, X, y)
     print(f"Cross-Validation (Mean MSE): {cv_score}")
 
-    # Plot the results
-    plot_results(X_train, y_train, X_test, y_test, y_pred, model)
+    # Plot results
+    plot_results(X_train, y_train, X_test, y_test, y_pred, pipeline)
+
+    return pipeline
 
 # Function to make predictions with the trained model
-def predict_new_data(model):
-    try:
-        speed_input = float(input("Enter the speed to predict distance: "))
-        normalized_speed = normalize_data([[speed_input]])  # Normalize the input speed
-        predicted_distance = model.predict(normalized_speed)
-        print(f"Predicted Distance: {predicted_distance[0]}")
-    except ValueError:
-        print("Invalid input. Please enter a numeric value.")
+def predict_new_data(pipeline):
+    print("Enter speeds to predict distances. Type 'done' when finished.")
+    while True:
+        speed_input = input("Enter speed (or 'done' to finish): ")
+        if speed_input.lower() == 'done':
+            break
+        try:
+            speed = float(speed_input)
+            predicted_distance = pipeline.predict([[speed]])
+            print(f"Speed: {speed}, Predicted Distance: {predicted_distance[0]}")
+        except ValueError:
+            print("Invalid input. Please enter a numerical value.")
 
-# Run the linear regression model
+# Main execution
 if __name__ == '__main__':
-    run_linear_regression()
-
-    # Predict new data after training
-    predict_new_data(model)
+    pipeline = run_linear_regression()
+    predict_new_data(pipeline)
