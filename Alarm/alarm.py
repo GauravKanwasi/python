@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import json
 import time
@@ -12,9 +13,11 @@ import shutil
 import csv
 import glob
 import random
-import textwrap
-import itertools
 import pygame
+import itertools
+import select # For non-blocking input in stopwatch
+
+# --- Rich Imports ---
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -23,9 +26,12 @@ from rich import box
 from rich.layout import Layout
 from rich.live import Live
 from rich.spinner import Spinner
-from rich.progress import Progress, BarColumn, TextColumn
-from rich.prompt import Prompt, IntPrompt
+from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+from rich.prompt import Prompt, IntPrompt, Confirm
 from rich.align import Align
+from rich.columns import Columns
+from rich.rule import Rule
+# --------------------
 
 SAVE_FILE = os.path.expanduser("~/.radiant_clock.json")
 PLUGIN_DIR = os.path.expanduser("~/.radiant_plugins")
@@ -33,10 +39,14 @@ BELL_DIR = os.path.expanduser("~/.radiant_bell")
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 os.makedirs(BELL_DIR, exist_ok=True)
 
+# --- Rich Console Instance ---
 console = Console()
+# ----------------------------
 
 class C:
+    # ANSI codes are kept for potential fallback or simple cases
     CYAN, GREEN, RED, YELLOW, DIM, RST, BOLD = ("\033[96m", "\033[92m", "\033[91m", "\033[93m", "\033[2m", "\033[0m", "\033[1m")
+    # --- Rich Color Themes ---
     RICH_THEMES = {
         "dark": {
             "primary": "cyan",
@@ -45,7 +55,9 @@ class C:
             "danger": "red",
             "info": "blue",
             "dim": "bright_black",
-            "banner": "bold magenta on black"
+            "banner": "bold magenta on black",
+            "background": "black",
+            "panel_border": "bright_magenta"
         },
         "light": {
             "primary": "blue",
@@ -54,29 +66,48 @@ class C:
             "danger": "red",
             "info": "blue",
             "dim": "grey50",
-            "banner": "bold blue on white"
+            "banner": "bold blue on white",
+            "background": "white",
+            "panel_border": "blue"
+        },
+        "matrix": { # New Theme
+            "primary": "green",
+            "secondary": "bright_green",
+            "warning": "yellow",
+            "danger": "red",
+            "info": "cyan",
+            "dim": "dark_green",
+            "banner": "bold green on black",
+            "background": "black",
+            "panel_border": "green"
         }
     }
+    # --------------------------
 
 def get_current_theme():
+    """Gets the current color theme dictionary."""
     theme_name = storage.data.get("theme", "dark")
     return C.RICH_THEMES.get(theme_name, C.RICH_THEMES["dark"])
 
 def clear_screen():
+    """Clears the terminal screen."""
     console.clear()
 
 def print_banner(text, style=None):
+    """Prints a styled banner using Rich."""
     theme = get_current_theme()
     if style is None:
         style = theme.get("banner", "")
-    panel = Panel(Align.center(Text(text, style=style)), expand=False, box=box.HEAVY)
+    panel = Panel(Align.center(Text(text, style=style)), expand=False, box=box.HEAVY, border_style=theme.get("panel_border"))
     console.print(Align.center(panel))
 
 def show_spinner(message, duration=1):
+    """Shows a Rich spinner for a given duration."""
     with console.status(f"[bold green]{message}...", spinner="dots8Bit"):
         time.sleep(duration)
 
 def get_single_character():
+    """Gets a single character input from the user."""
     file_descriptor = sys.stdin.fileno()
     old_settings = termios.tcgetattr(file_descriptor)
     try:
@@ -87,6 +118,7 @@ def get_single_character():
     return char
 
 def get_validated_input(prompt, validator_function, error_message="Invalid input. Please try again."):
+    """Gets validated input from the user."""
     while True:
         user_input = Prompt.ask(prompt)
         try:
@@ -96,6 +128,7 @@ def get_validated_input(prompt, validator_function, error_message="Invalid input
             console.print(f"[red]{error_message}[/red]")
 
 def validate_time_string(time_string):
+    """Validates a time string (HH:MM or HH:MM AM/PM)."""
     if " " in time_string:
         dt = datetime.datetime.strptime(time_string.upper(), "%I:%M %p")
         return dt.hour, dt.minute
@@ -109,6 +142,7 @@ def validate_time_string(time_string):
         return hour, minute
 
 def validate_integer_range(minimum_value, maximum_value):
+    """Returns a validator function for an integer range."""
     def validator(string_input):
         value = int(string_input)
         if not (minimum_value <= value <= maximum_value):
@@ -117,6 +151,7 @@ def validate_integer_range(minimum_value, maximum_value):
     return validator
 
 def validate_positive_integer(string_input):
+    """Validates a positive integer."""
     value = int(string_input)
     if value < 0:
         raise ValueError("Value must be positive")
@@ -130,7 +165,8 @@ class Storage:
         "favorite_timezones": [],
         "bell_volume": 75,
         "voice_wake": False,
-        "log": []
+        "log": [],
+        "show_quotes": True
     }
     def __init__(self, filepath=SAVE_FILE):
         self.filepath = filepath
@@ -214,8 +250,10 @@ class AlarmManager:
         self.running = True
         self.watcher_thread = threading.Thread(target=self._watcher, daemon=True)
         self.watcher_thread.start()
+        # --- Pygame Mixer Init ---
         pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
         pygame.mixer.init()
+        # ------------------------
 
     def log_event(self, message):
         event = {
@@ -237,6 +275,7 @@ class AlarmManager:
                     self._ring(alarm)
 
     def _play_bell(self):
+        """Plays the alarm bell using pygame or fallback."""
         sound_type = self.storage.data["sound"]
         volume = self.storage.data["bell_volume"] / 100.0
 
@@ -272,16 +311,19 @@ class AlarmManager:
         self.log_event(f"Alarm fired: {alarm.label}")
         clear_screen()
 
+        # --- Enhanced Alarm Ringing with Rich ---
         theme = get_current_theme()
         console.print(Panel("[bold red blink]🔔 ALARM!!![/bold red blink]", expand=False, box=box.DOUBLE, border_style="red"))
         console.print(Align.center(f"[bold]{alarm.label}[/bold]  [cyan]{alarm.hour:02d}:{alarm.minute:02d}[/cyan]"))
 
+        # Animated bar using Rich
         bar_text = Text("█" * 60)
         bar_text.stylize(theme["danger"])
         console.print(bar_text)
 
         self._play_bell()
 
+        # --- Prompt for snooze/stop using Rich ---
         try:
             user_input = Prompt.ask("\nPress [green]ENTER[/green] to stop, or type '[yellow]s X[/yellow]' to snooze for X minutes", default="", show_default=False).strip().lower()
             if user_input.startswith("s "):
@@ -291,6 +333,16 @@ class AlarmManager:
                         alarm.snooze(snooze_minutes)
                         show_spinner("Snoozing", 1)
                         console.print(f"[green]Snoozed for {snooze_minutes} minutes.[/green]")
+                        # Show snooze countdown
+                        snooze_end_time = time.time() + (snooze_minutes * 60)
+                        with Live(console=console, auto_refresh=False) as live_snooze:
+                            while time.time() < snooze_end_time:
+                                remaining = int(snooze_end_time - time.time())
+                                mins, secs = divmod(remaining, 60)
+                                snooze_text = f"[yellow]Snoozing... {mins:02d}:{secs:02d}[/yellow]"
+                                live_snooze.update(Align.center(Panel(snooze_text, expand=False, border_style="yellow")))
+                                live_snooze.refresh()
+                                time.sleep(1)
                     else:
                         console.print("[yellow]Invalid snooze time. Stopping alarm.[/yellow]")
                         if alarm.recurrence == "once":
@@ -450,12 +502,12 @@ class GlobeClock:
     def _get_weather(city):
         try:
             result = subprocess.run(
-                ["curl", "-m", "5", "-s", f"wttr.in/{city}?format=%c+%t"],
+                ["curl", "-m", "5", "-s", f"wttr.in/{city}?format=1"],
                 capture_output=True, text=True, check=True, timeout=6
             )
             return result.stdout.strip()
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-            return "Weather data unavailable"
+            return "Weather: N/A"
 
     @classmethod
     def pick_timezone(cls, favorites_only=False):
@@ -520,7 +572,41 @@ class GlobeClock:
                 return None
 
     @classmethod
-    def show(cls):
+    def show_multiple(cls):
+        """Shows multiple timezones in a grid."""
+        zones_to_show = storage.data["favorite_timezones"] if storage.data["favorite_timezones"] else cls.TIMEZONES[:9] # Show up to 9
+        if not zones_to_show:
+            console.print("[yellow]No zones to display.[/yellow]")
+            input("Press Enter...")
+            return
+
+        panels = []
+        for tz in zones_to_show:
+            city = tz.split("/")[-1].replace("_", " ")
+            prev_tz = os.environ.get("TZ")
+            os.environ["TZ"] = tz
+            time.tzset()
+            now = datetime.datetime.now()
+            if prev_tz:
+                os.environ["TZ"] = prev_tz
+            else:
+                os.unsetenv("TZ")
+            time.tzset()
+            weather = cls._get_weather(city)
+            time_str = now.strftime("%H:%M:%S")
+            panel_content = f"[bold]{tz}[/bold]\n{time_str}\n[dim]{weather}[/dim]"
+            panel = Panel(panel_content, box=box.ROUNDED, border_style=get_current_theme()["primary"])
+            panels.append(panel)
+
+        clear_screen()
+        print_banner("🌎  W O R L D   C L O C K")
+        console.print(Columns(panels, equal=True, expand=True))
+        console.print("\nPress any key to return...")
+        get_single_character()
+
+    @classmethod
+    def show_single(cls):
+        """Shows a single timezone with refresh option."""
         timezone = cls.pick_timezone()
         if not timezone:
             return
@@ -545,12 +631,30 @@ class GlobeClock:
             if char == "q":
                 break
             elif char == "r":
-                cls.show()
+                cls.show_single()
                 break
             elif char == "f":
                 timezone = cls.pick_timezone(favorites_only=True)
                 if timezone:
                     city = timezone.split("/")[-1].replace("_", " ")
+
+    @classmethod
+    def menu(cls):
+        """World Clock Menu"""
+        while True:
+            clear_screen()
+            print_banner("🌍  W O R L D   C L O C K")
+            theme = get_current_theme()
+            console.print("1. Show Single Timezone", style=theme["primary"])
+            console.print("2. Show Multiple Timezones (Grid)", style=theme["primary"])
+            console.print("3. Back", style=theme["primary"])
+            choice = Prompt.ask("[bold]Select an option[/bold]", choices=["1", "2", "3"])
+            if choice == "1":
+                cls.show_single()
+            elif choice == "2":
+                cls.show_multiple()
+            elif choice == "3":
+                break
 
 class Timer:
     @staticmethod
@@ -562,57 +666,130 @@ class Timer:
             time.sleep(1)
             return
         total_seconds = minutes * 60
+        paused = False
+        pause_start_time = None
 
         theme = get_current_theme()
         with Live(console=console, auto_refresh=False) as live:
-            while total_seconds > 0:
-                hours, remainder = divmod(total_seconds, 3600)
-                mins, secs = divmod(remainder, 60)
-                time_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+            while total_seconds > 0 or paused:
+                if not paused:
+                    hours, remainder = divmod(total_seconds, 3600)
+                    mins, secs = divmod(remainder, 60)
+                    time_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-                panel = Panel(f"[bold red]{time_str}[/bold red]", title="[blink]⏳ Countdown[/blink]", expand=False, border_style="red", box=box.DOUBLE)
-                live.update(Align.center(panel))
-                live.refresh()
+                    # Progress Bar
+                    progress_percentage = 1.0 - (total_seconds / (minutes * 60))
+                    progress_bar = Progress(
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(bar_width=40),
+                        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                        TimeRemainingColumn(),
+                        console=console
+                    )
+                    task_id = progress_bar.add_task("Countdown", total=1.0)
+                    progress_bar.update(task_id, completed=progress_percentage)
 
-                time.sleep(1)
-                total_seconds -= 1
+                    # Create a panel for the countdown
+                    panel_content = f"[bold red]{time_str}[/bold red]\n"
+                    panel = Panel(panel_content, title="[blink]⏳ Countdown[/blink]", expand=False, border_style="red", box=box.DOUBLE)
+                    layout = Layout()
+                    layout.split_column(
+                        Layout(Align.center(panel)),
+                        Layout(Align.center(progress_bar))
+                    )
+                    live.update(layout)
+                    live.refresh()
+
+                    # Check for pause/resume keypress (non-blocking)
+                    ready, _, _ = select.select([sys.stdin], [], [], 0)
+                    if ready:
+                        char = get_single_character()
+                        if char.lower() == 'p':
+                            paused = True
+                            pause_start_time = time.time()
+                            console.print("[yellow]Paused. Press 'r' to resume.[/yellow]")
+
+                    if not paused:
+                        time.sleep(1)
+                        total_seconds -= 1
+                else: # Paused state
+                     # Show paused indicator and wait for 'r'
+                     elapsed_pause = int(time.time() - pause_start_time)
+                     pause_str = f"[yellow]PAUSED ({elapsed_pause}s)[/yellow]"
+                     panel = Panel(pause_str, title="[blink]⏳ Countdown[/blink]", expand=False, border_style="yellow", box=box.DOUBLE)
+                     live.update(Align.center(panel))
+                     live.refresh()
+
+                     ready, _, _ = select.select([sys.stdin], [], [], 0.5) # Check every 0.5s
+                     if ready:
+                         char = get_single_character()
+                         if char.lower() == 'r':
+                             paused = False
+                             # Compensate for pause time
+                             total_seconds += int(time.time() - pause_start_time)
+                             console.print("[green]Resumed.[/green]")
+
 
         clear_screen()
+        # --- Rich Time's Up Display ---
         console.print(Panel("[bold red blink]🔔 TIME'S UP!!![/bold red blink]", expand=False, box=box.DOUBLE, border_style="red"))
         alarm_manager = AlarmManager(storage)
         alarm_manager._play_bell()
         input("Press Enter to stop alarm...")
+        # ----------------------------
 
     @staticmethod
     def stopwatch():
         start_time = time.time()
-        console.print("[green] Stopwatch started. Press any key to stop. [/green]")
+        laps = []
+        console.print("[green] Stopwatch started. 'l': Lap, 's': Stop [/green]")
         try:
             theme = get_current_theme()
             with Live(console=console, auto_refresh=False) as live:
                 while True:
-                    elapsed = int(time.time() - start_time)
+                    elapsed = time.time() - start_time
                     hours, remainder = divmod(elapsed, 3600)
                     mins, secs = divmod(remainder, 60)
-                    time_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+                    time_str = f"{int(hours):02d}:{int(mins):02d}:{secs:06.3f}"
 
-                    panel = Panel(f"[bold green]{time_str}[/bold green]", title="[blink]⏱ Stopwatch[/blink]", expand=False, border_style="green", box=box.ROUNDED)
+                    # Create a panel for the stopwatch
+                    panel_content = f"[bold green]{time_str}[/bold green]"
+                    if laps:
+                        panel_content += "\n[dim]--- Laps ---[/dim]\n"
+                        for i, lap_time in enumerate(laps[-5:], 1): # Show last 5 laps
+                            panel_content += f"[dim]{i}. {lap_time}[/dim]\n"
+
+                    panel = Panel(panel_content.rstrip(), title="[blink]⏱ Stopwatch[/blink]", expand=False, border_style="green", box=box.ROUNDED)
                     live.update(Align.center(panel))
                     live.refresh()
 
-                    time.sleep(0.1)
-                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                         get_single_character()
-                         break
+                    # Non-blocking check for keypress using select
+                    ready, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if ready:
+                        char = get_single_character().lower()
+                        if char == 's':
+                            break
+                        elif char == 'l':
+                            lap_elapsed = time.time() - start_time
+                            lap_hours, lap_rem = divmod(lap_elapsed, 3600)
+                            lap_mins, lap_secs = divmod(lap_rem, 60)
+                            lap_str = f"{int(lap_hours):02d}:{int(lap_mins):02d}:{lap_secs:06.3f}"
+                            laps.append(lap_str)
+                            console.print(f"[blue]Lap {len(laps)}: {lap_str}[/blue]")
 
         except KeyboardInterrupt:
             pass
         finally:
-            elapsed_final = int(time.time() - start_time)
+            elapsed_final = time.time() - start_time
             hours_f, remainder_f = divmod(elapsed_final, 3600)
             mins_f, secs_f = divmod(remainder_f, 60)
-            time_str_f = f"{hours_f:02d}:{mins_f:02d}:{secs_f:02d}"
+            time_str_f = f"{int(hours_f):02d}:{int(mins_f):02d}:{secs_f:06.3f}"
             console.print(f"\n[green] Stopwatch stopped at {time_str_f}[/green]")
+            if laps:
+                console.print("[blue]--- Final Laps ---[/blue]")
+                for i, lap_time in enumerate(laps, 1):
+                    console.print(f"[blue]{i}. {lap_time}[/blue]")
+            input("Press Enter to continue...")
 
 def ntp_sync():
     clear_screen()
@@ -636,7 +813,9 @@ def daily_quote():
         "Lost time is never found again. - Benjamin Franklin",
         "You will never find time for anything. You must make it. - Charles Buxton",
         "The future is something which everyone reaches at the rate of sixty minutes an hour. - C.S. Lewis",
-        "Time is really the only valuable thing a man can spend. - T.M. Luhrmann"
+        "Time is really the only valuable thing a man can spend. - T.M. Luhrmann",
+        "The key is in not spending time, but in investing it. - Stephen R. Covey",
+        "Time is the most valuable thing a man can spend. - Theophrastus"
     ]
     return random.choice(quotes)
 
@@ -670,21 +849,49 @@ class Settings:
             theme = get_current_theme()
             with storage_instance.lock:
                 console.print(f"Theme: [bold]{storage_instance.data['theme']}[/bold]   Sound: [bold]{storage_instance.data['sound']}[/bold]   Volume: [bold]{storage_instance.data['bell_volume']}%[/bold]", style=theme["info"])
+                console.print(f"Show Quotes: [bold]{'Yes' if storage_instance.data['show_quotes'] else 'No'}[/bold]", style=theme["info"])
 
             console.print("1. Toggle theme", style=theme["primary"])
             console.print("2. Pick sound", style=theme["primary"])
             console.print("3. Set volume", style=theme["primary"])
-            console.print("4. NTP sync", style=theme["primary"])
-            console.print("5. Back", style=theme["primary"])
-            choice = Prompt.ask("[bold]Select an option[/bold]", choices=["1", "2", "3", "4", "5"])
+            console.print("4. Toggle Quotes", style=theme["primary"])
+            console.print("5. NTP sync", style=theme["primary"])
+            console.print("6. Back", style=theme["primary"])
+            choice = Prompt.ask("[bold]Select an option[/bold]", choices=["1", "2", "3", "4", "5", "6"])
 
             if choice == "1":
-                with storage_instance.lock:
-                    storage_instance.data["theme"] = "light" if storage_instance.data["theme"] == "dark" else "dark"
-                storage_instance.save()
-                show_spinner("Saving Theme", 0.5)
-                console.print(f"[green]Theme set to {storage.data['theme']}.[/green]")
-                time.sleep(0.5)
+                 # --- Theme Selection with Preview ---
+                 theme_names = list(C.RICH_THEMES.keys())
+                 current_theme_name = storage.data.get("theme", "dark")
+                 console.print("--- Available Themes ---", style=theme["secondary"])
+                 table = Table(show_header=False, box=None)
+                 table.add_column("Sel", width=2)
+                 table.add_column("No.", width=3)
+                 table.add_column("Theme")
+
+                 for index, name in enumerate(theme_names, 1):
+                     marker = ">>" if name == current_theme_name else "  "
+                     table.add_row(marker, str(index), name)
+                 console.print(table)
+
+                 try:
+                     theme_choice = get_validated_input("Select theme (number): ",
+                                                       validate_integer_range(1, len(theme_names)),
+                                                       "Invalid selection.")
+                     selected_theme_name = theme_names[theme_choice - 1]
+                     with storage_instance.lock:
+                         storage_instance.data["theme"] = selected_theme_name
+                     storage_instance.save()
+                     console.print(f"[green]Theme set to '{selected_theme_name}'.[/green]")
+                     # Brief preview of new theme
+                     new_theme = C.RICH_THEMES.get(selected_theme_name, C.RICH_THEMES["dark"])
+                     preview_text = Text("Theme Preview: This is sample text.", style=new_theme["primary"])
+                     console.print(Panel(preview_text, expand=False, border_style=new_theme["panel_border"]))
+                     time.sleep(1.5) # Show preview briefly
+                 except (ValueError, KeyboardInterrupt):
+                     console.print("\n[yellow]Theme selection cancelled.[/yellow]")
+                     time.sleep(1)
+                 # --------------------------
 
             elif choice == "2":
                 console.print("--- Available Sounds ---", style=theme["secondary"])
@@ -727,8 +934,16 @@ class Settings:
                     time.sleep(1)
 
             elif choice == "4":
-                ntp_sync()
+                 with storage_instance.lock:
+                     storage_instance.data["show_quotes"] = not storage_instance.data["show_quotes"]
+                 storage_instance.save()
+                 status = "enabled" if storage.data["show_quotes"] else "disabled"
+                 console.print(f"[green]Quotes {status}.[/green]")
+                 time.sleep(1)
+
             elif choice == "5":
+                ntp_sync()
+            elif choice == "6":
                 break
             else:
                 console.print("[red]Invalid choice.[/red]")
@@ -752,8 +967,9 @@ def main():
         clear_screen()
         print_banner("🕒  R A D I A N T   C L O C K")
         theme = get_current_theme()
-        console.print(f"[{theme['dim']}]{daily_quote().center(60)}[/{theme['dim']}]")
-        console.print("")
+        if storage.data.get("show_quotes", True):
+            console.print(f"[{theme['dim']}]{daily_quote().center(60)}[/{theme['dim']}]")
+        console.print("") # Spacer
         console.print("1. Alarm Clock", style=theme["primary"])
         console.print("2. World Clock", style=theme["primary"])
         console.print("3. Countdown Timer", style=theme["primary"])
@@ -769,7 +985,7 @@ def main():
             if choice_number == 1:
                 alarm_manager.menu()
             elif choice_number == 2:
-                GlobeClock.show()
+                GlobeClock.menu() # Use the new menu
             elif choice_number == 3:
                 Timer.countdown()
             elif choice_number == 4:
@@ -803,9 +1019,4 @@ def main():
             break
 
 if __name__ == "__main__":
-    try:
-        import select
-    except ImportError:
-        select = None
-        console.print("[yellow]Note: Non-blocking keypress for stopwatch might not work on this system.[/yellow]")
     main()
