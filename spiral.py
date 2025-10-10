@@ -2,147 +2,147 @@ import turtle
 import colorsys
 import math
 import random
+import time
 
-# Setup the screen
+# --- Constants and Configuration ---
+SCREEN_WIDTH = 900
+SCREEN_HEIGHT = 700
+NUM_STARS = 200
+STAR_TWINKLE_SPEED = 0.05
+BACKGROUND_COLOR = "#00001a" # A dark midnight blue
+
+# --- Setup the Screen ---
 screen = turtle.Screen()
-screen.bgcolor("black")
-screen.setup(width=800, height=600)
-screen.title("Enhanced Rainbow Spiral Visualization")
-screen.colormode(1.0)  # Using 0-1 range for color values
-screen.tracer(0)  # Disable automatic screen updates for better performance
+screen.setup(width=SCREEN_WIDTH, height=SCREEN_HEIGHT)
+screen.bgcolor(BACKGROUND_COLOR)
+screen.title("Interactive Spiral Nebula")
+screen.colormode(1.0)  # Use 0-1 range for color values
+screen.tracer(0)      # Disable automatic screen updates for performance
 
-# Function to draw stars in the background
-def draw_stars():
-    stars = turtle.Turtle()
-    stars.hideturtle()
-    stars.penup()
-    stars.speed(0)
-    
-    for _ in range(150):  # Increased number of stars
-        # Vary star sizes and brightness for depth effect
-        size = random.uniform(0.5, 3)
-        brightness = random.uniform(0.3, 1.0)
-        stars.color((brightness, brightness, brightness))
+# --- Starfield Background ---
+# Create a single turtle to efficiently draw all stars
+star_drawer = turtle.Turtle()
+star_drawer.hideturtle()
+star_drawer.speed(0)
+star_drawer.penup()
+
+# Store star properties [x, y, size, brightness, pulse_direction]
+stars = []
+for _ in range(NUM_STARS):
+    stars.append([
+        random.randint(-SCREEN_WIDTH // 2, SCREEN_WIDTH // 2),
+        random.randint(-SCREEN_HEIGHT // 2, SCREEN_HEIGHT // 2),
+        random.uniform(0.5, 2.5),
+        random.uniform(0.2, 1.0),
+        random.choice([1, -1])
+    ])
+
+def draw_twinkling_stars():
+    """Updates star brightness and redraws them for a twinkling effect."""
+    star_drawer.clear()
+    for star in stars:
+        # Update brightness
+        star[3] += star[4] * STAR_TWINKLE_SPEED
+        if not 0.2 < star[3] < 1.0:
+            star[4] *= -1 # Reverse pulse direction
+
+        # Draw the star
+        brightness = star[3]
+        star_drawer.color(brightness, brightness, brightness)
+        star_drawer.goto(star[0], star[1])
+        star_drawer.dot(star[2])
+
+# --- Spiral Class for Object-Oriented Drawing ---
+class Spiral:
+    """Manages the state and drawing of a single animated spiral."""
+    def __init__(self, x, y):
+        self.turtle = turtle.Turtle()
+        self.turtle.hideturtle()
+        self.turtle.speed(0)
+        self.turtle.penup()
+        self.turtle.goto(x, y)
+        self.turtle.pendown()
+
+        # Spiral properties
+        self.angle = random.uniform(20, 70) * random.choice([-1, 1])
+        self.max_distance = random.uniform(150, 400)
+        self.hue_offset = random.random()
+        self.distance = 1
+        self.total_angle = 0
+        self.is_active = True
+
+    def update(self):
+        """Draws one segment of the spiral and updates its state."""
+        if not self.is_active:
+            return
+
+        # Smooth hue transition based on total rotation
+        hue = (self.total_angle / 360 + self.hue_offset) % 1.0
         
-        # Position stars with more natural distribution
-        x = random.randint(-390, 390)
-        y = random.randint(-290, 290)
-        stars.goto(x, y)
-        stars.dot(size)
-
-# Draw stars before anything else
-draw_stars()
-
-# Create the turtle object for the spiral
-spiral = turtle.Turtle()
-spiral.speed(0)        # Fastest animation speed
-spiral.hideturtle()    # Hide the turtle cursor
-
-# Function to draw enhanced spirals
-def draw_enhanced_spiral(angle, max_distance, hue_offset=0, start_pos=(0, 0)):
-    spiral.penup()
-    spiral.goto(start_pos)
-    spiral.pendown()
-    
-    distance = 1
-    total_angle = 0
-    previous_width = 0
-    
-    while distance < max_distance:
-        # Calculate hue based on total angle for smoother transitions
-        hue = (total_angle / 360 + hue_offset) % 1.0
+        # Dynamic saturation and value for a "glowing" effect
+        saturation = 0.9 + 0.1 * math.sin(self.total_angle * math.pi / 90)
+        value = 0.85 + 0.15 * math.sin(self.total_angle * math.pi / 180)
         
-        # Add dynamic saturation and brightness effects
-        saturation = 0.85 + 0.15 * math.sin(total_angle * math.pi / 90)
-        value = 0.9 + 0.1 * math.sin(total_angle * math.pi / 120)
+        self.turtle.color(colorsys.hsv_to_rgb(hue, saturation, value))
+
+        # Pulsing pen width
+        width = 2 + 2.5 * abs(math.sin(self.total_angle * math.pi / 270))
+        self.turtle.width(width)
         
-        # Convert HSV to RGB
-        rgb = colorsys.hsv_to_rgb(hue, saturation, value)
-        spiral.color(rgb)
+        # Draw and advance the spiral
+        self.turtle.forward(self.distance * 0.2)
+        self.turtle.left(self.angle)
         
-        # Dynamically adjust pen width with a pulsing effect
-        width = 1.5 + 3 * abs(math.sin(total_angle * math.pi / 180))
-        if abs(width - previous_width) > 0.5:  # Smooth width transitions
-            spiral.width(width)
-            previous_width = width
+        # Update state for the next frame
+        self.total_angle += abs(self.angle)
+        self.distance += 0.25
         
-        # Draw and rotate
-        spiral.forward(distance * 0.5)  # Slower expansion for smoother spiral
-        spiral.left(angle)
-        total_angle += angle
-        distance += 0.8  # Slower expansion rate for tighter spiral
+        # Deactivate spiral if it grows too large
+        if self.distance > self.max_distance:
+            self.is_active = False
+            self.turtle.clear() # Clear the turtle's drawings
+
+# --- Main Animation Logic ---
+spirals = []
+
+def create_new_spiral(x, y):
+    """Callback function to create a new spiral at the clicked location."""
+    spirals.append(Spiral(x, y))
+
+# Write instructions
+info_turtle = turtle.Turtle()
+info_turtle.hideturtle()
+info_turtle.penup()
+info_turtle.color("white")
+info_turtle.goto(0, SCREEN_HEIGHT // 2 - 40)
+info_turtle.write("Click anywhere to create a spiral nebula", align="center", font=("Arial", 16, "normal"))
+
+# Bind the click event
+screen.onclick(create_new_spiral)
+
+# Initial spirals to start the show
+create_new_spiral(0, 0)
+create_new_spiral(150, 100)
+
+# --- Animation Loop ---
+try:
+    while True:
+        # 1. Draw the dynamic background
+        draw_twinkling_stars()
         
-        # Periodically update the screen for smoother animation
-        if int(distance) % 10 == 0:
-            screen.update()
+        # 2. Update and draw each active spiral
+        for s in spirals:
+            s.update()
+            
+        # 3. Clean up inactive spirals from the list to save memory
+        spirals = [s for s in spirals if s.is_active]
+        
+        # 4. Refresh the screen with all the new drawings
+        screen.update()
+        
+        # 5. Small delay to control frame rate and reduce CPU usage
+        time.sleep(0.01)
 
-# Draw multiple spirals for a more complex visual
-draw_enhanced_spiral(angle=25, max_distance=250, hue_offset=0, start_pos=(-20, 10))
-draw_enhanced_spiral(angle=-25, max_distance=200, hue_offset=0.5, start_pos=(20, -10))
-draw_enhanced_spiral(angle=45, max_distance=180, hue_offset=0.3, start_pos=(0, 0))
-
-# Draw a fourth spiral in the center for more complexity
-draw_enhanced_spiral(angle=-45, max_distance=120, hue_offset=0.7, start_pos=(0, 0))
-
-# Add title text
-title = turtle.Turtle()
-title.hideturtle()
-title.penup()
-title.goto(0, 250)
-title.color("white")
-title.write("RAINBOW SPIRAL VISUALIZATION", align="center", font=("Arial", 28, "bold"))
-
-# Add subtitle
-subtitle = turtle.Turtle()
-subtitle.hideturtle()
-subtitle.penup()
-subtitle.goto(0, 210)
-subtitle.color("lightblue")
-subtitle.write("Mathematical Art in Motion", align="center", font=("Arial", 18, "italic"))
-
-# Add information text
-info = turtle.Turtle()
-info.hideturtle()
-info.penup()
-info.goto(0, -280)
-info.color("lightgray")
-info.write("Four Interlocking Spirals with Dynamic Color Effects", align="center", font=("Arial", 14))
-
-# Add instructions
-instructions = turtle.Turtle()
-instructions.hideturtle()
-instructions.penup()
-instructions.goto(0, -320)
-instructions.color("yellow")
-instructions.write("Click anywhere to exit", align="center", font=("Arial", 12, "bold"))
-
-# Add decorative elements around the edges
-def draw_decorative_elements():
-    decor = turtle.Turtle()
-    decor.hideturtle()
-    decor.speed(0)
-    decor.penup()
-    
-    # Draw small dots around the edges
-    for angle in range(0, 360, 15):
-        decor.color(colorsys.hsv_to_rgb(angle/360, 0.7, 1.0))
-        decor.goto(380 * math.cos(math.radians(angle)), 280 * math.sin(math.radians(angle)))
-        decor.dot(4)
-    
-    # Draw connecting lines
-    decor.pensize(0.5)
-    decor.goto(380, 0)
-    for _ in range(36):
-        hue = random.random()
-        decor.color(colorsys.hsv_to_rgb(hue, 0.5, 0.8))
-        decor.pendown()
-        decor.goto(380 * math.cos(math.radians(_ * 10)), 280 * math.sin(math.radians(_ * 10)))
-        decor.penup()
-
-draw_decorative_elements()
-
-# Final screen update
-screen.update()
-
-# Finish up
-screen.exitonclick()
+except turtle.Terminator:
+    # This block will be executed when the user closes the window
+    print("Exiting the Spiral Nebula visualization. Goodbye!")
