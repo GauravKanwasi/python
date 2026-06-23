@@ -1,4 +1,3 @@
-
 import os
 import json
 import time
@@ -6,19 +5,36 @@ import datetime
 import signal
 import threading
 import sys
-import tty
-import termios
 import subprocess
 import shutil
 import csv
 import glob
 import random
-import pygame
 import itertools
-import select
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
-from enum import Enum
+
+# --- Cross-Platform Imports ---
+try:
+    from zoneinfo import ZoneInfo, available_timezones
+except ImportError:
+    print("Error: Python 3.9+ is required for the 'zoneinfo' module.")
+    sys.exit(1)
+
+try:
+    import msvcrt
+    WINDOWS = True
+except ImportError:
+    import tty
+    import termios
+    import select
+    WINDOWS = False
+
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
 
 # --- Rich Imports ---
 from rich.console import Console
@@ -57,56 +73,28 @@ console = Console()
 class ThemeManager:
     DEFAULT_THEMES = {
         "cyberpunk": {
-            "primary": "#00ffff",
-            "secondary": "#ff00ff",
-            "warning": "#ffff00",
-            "danger": "#ff0066",
-            "info": "#00ff99",
-            "dim": "#666666",
-            "banner": "bold cyan on black",
-            "background": "black",
-            "panel_border": "#ff00ff",
-            "accent": "#00ff99",
-            "text": "white"
+            "primary": "#00ffff", "secondary": "#ff00ff", "warning": "#ffff00",
+            "danger": "#ff0066", "info": "#00ff99", "dim": "#666666",
+            "banner": "bold cyan on black", "background": "black",
+            "panel_border": "#ff00ff", "accent": "#00ff99", "text": "white"
         },
         "nord": {
-            "primary": "#88c0d0",
-            "secondary": "#81a1c1",
-            "warning": "#ebcb8b",
-            "danger": "#bf616a",
-            "info": "#5e81ac",
-            "dim": "#4c566a",
-            "banner": "bold #88c0d0 on #2e3440",
-            "background": "#2e3440",
-            "panel_border": "#5e81ac",
-            "accent": "#a3be8c",
-            "text": "#eceff4"
+            "primary": "#88c0d0", "secondary": "#81a1c1", "warning": "#ebcb8b",
+            "danger": "#bf616a", "info": "#5e81ac", "dim": "#4c566a",
+            "banner": "bold #88c0d0 on #2e3440", "background": "#2e3440",
+            "panel_border": "#5e81ac", "accent": "#a3be8c", "text": "#eceff4"
         },
         "dracula": {
-            "primary": "#bd93f9",
-            "secondary": "#50fa7b",
-            "warning": "#f1fa8c",
-            "danger": "#ff5555",
-            "info": "#8be9fd",
-            "dim": "#6272a4",
-            "banner": "bold #bd93f9 on #282a36",
-            "background": "#282a36",
-            "panel_border": "#bd93f9",
-            "accent": "#ff79c6",
-            "text": "#f8f8f2"
+            "primary": "#bd93f9", "secondary": "#50fa7b", "warning": "#f1fa8c",
+            "danger": "#ff5555", "info": "#8be9fd", "dim": "#6272a4",
+            "banner": "bold #bd93f9 on #282a36", "background": "#282a36",
+            "panel_border": "#bd93f9", "accent": "#ff79c6", "text": "#f8f8f2"
         },
         "matrix": {
-            "primary": "green",
-            "secondary": "bright_green",
-            "warning": "yellow",
-            "danger": "red",
-            "info": "cyan",
-            "dim": "dark_green",
-            "banner": "bold green on black",
-            "background": "black",
-            "panel_border": "green",
-            "accent": "bright_green",
-            "text": "green"
+            "primary": "green", "secondary": "bright_green", "warning": "yellow",
+            "danger": "red", "info": "cyan", "dim": "dark_green",
+            "banner": "bold green on black", "background": "black",
+            "panel_border": "green", "accent": "bright_green", "text": "green"
         }
     }
 
@@ -115,7 +103,6 @@ class ThemeManager:
         self.custom_themes = self._load_custom_themes()
 
     def _load_custom_themes(self) -> Dict:
-        """Load custom themes from file."""
         if os.path.exists(THEMES_FILE):
             try:
                 with open(THEMES_FILE, 'r') as f:
@@ -125,36 +112,30 @@ class ThemeManager:
         return {}
 
     def get_all_themes(self) -> Dict:
-        """Get all available themes."""
         return {**self.DEFAULT_THEMES, **self.custom_themes}
 
     def get_theme(self, name: str) -> Dict:
-        """Get a specific theme."""
         all_themes = self.get_all_themes()
         return all_themes.get(name, self.DEFAULT_THEMES["cyberpunk"])
 
     def save_custom_theme(self, name: str, theme: Dict):
-        """Save a custom theme."""
         self.custom_themes[name] = theme
         with open(THEMES_FILE, 'w') as f:
             json.dump(self.custom_themes, f, indent=2)
 
 # --- Animation Classes ---
 class AnimationFrame:
-    """Represents a single frame of animation."""
     def __init__(self, text: str, duration: float = 0.1):
         self.text = text
         self.duration = duration
 
 class Animation:
-    """Base class for animations."""
     def __init__(self, frames: List[AnimationFrame]):
         self.frames = frames
         self.current_frame = 0
         self.last_update = time.time()
 
     def update(self) -> str:
-        """Update animation and return current frame text."""
         current_time = time.time()
         if current_time - self.last_update >= self.frames[self.current_frame].duration:
             self.current_frame = (self.current_frame + 1) % len(self.frames)
@@ -162,18 +143,11 @@ class Animation:
         return self.frames[self.current_frame].text
 
 class LoadingAnimation(Animation):
-    """Various loading animations."""
     STYLES = {
         "dots": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
         "clock": ["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
         "earth": ["🌍", "🌎", "🌏"],
-        "moon": ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"],
-        "hearts": ["💛", "💙", "💜", "💚", "❤️"],
         "weather": ["☀️", "🌤️", "⛅", "🌥️", "☁️", "🌦️", "🌧️", "⛈️", "🌨️"],
-        "stars": ["✦", "✧", "★", "☆", "✦", "✧", "★", "☆"],
-        "pulse": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃", "▂"],
-        "wave": ["≈", "≋", "≈", "≋", "≈", "≋"],
-        "bounce": ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
     }
 
     def __init__(self, style: str = "dots", duration: float = 0.1):
@@ -208,11 +182,8 @@ class Storage:
         "startup_sound": True,
         "alarm_history": [],
         "statistics": {
-            "alarms_created": 0,
-            "alarms_dismissed": 0,
-            "alarms_snoozed": 0,
-            "timers_completed": 0,
-            "total_runtime": 0
+            "alarms_created": 0, "alarms_dismissed": 0, "alarms_snoozed": 0,
+            "timers_completed": 0, "total_runtime": 0
         }
     }
 
@@ -225,39 +196,31 @@ class Storage:
         self.start_time = time.time()
 
     def load(self):
-        """Load configuration from file."""
         try:
             if os.path.isfile(self.filepath):
                 with open(self.filepath, 'r') as file:
                     loaded_data = json.load(file)
-                    # Deep merge loaded data with defaults (simplified)
                     self.data.update(loaded_data)
         except (json.JSONDecodeError, IOError) as error:
             console.print(f"[red]Error loading save file: {error}. Using defaults.[/red]")
 
     def save(self):
-        """Save configuration to file."""
         with self.lock:
-            # Update runtime statistics
             self.data["statistics"]["total_runtime"] += int(time.time() - self.start_time)
             self.start_time = time.time()
             try:
-                # Create backup
                 if os.path.exists(self.filepath):
                     backup_path = f"{self.filepath}.backup"
                     shutil.copy2(self.filepath, backup_path)
-                # Save data
                 with open(self.filepath, "w") as file:
                     json.dump(self.data, file, indent=2, sort_keys=True)
             except IOError as error:
                 console.print(f"[red]Error saving: {error}[/red]")
 
     def increment_stat(self, stat_name: str, amount: int = 1):
-        """Increment a statistic."""
         with self.lock:
             if stat_name in self.data["statistics"]:
                 self.data["statistics"][stat_name] += amount
-                # self.save() # Save stats on increment might be too frequent, handled on main save
 
 # --- Global Storage Instance ---
 storage = Storage()
@@ -266,47 +229,38 @@ storage.theme_manager = theme_manager
 
 # --- Enhanced Utility Functions ---
 def get_current_theme():
-    """Gets the current color theme dictionary."""
     theme_name = storage.data.get("theme", "cyberpunk")
     return theme_manager.get_theme(theme_name)
 
 def clear_screen():
-    """Clears the terminal screen with optional animation."""
     if storage.data.get("animations_enabled", True):
-        # Fade out effect
-        for i in range(5, 0, -1):
+        for i in range(3, 0, -1):
             console.clear()
             console.print("\n" * i)
-            time.sleep(0.02)
+            time.sleep(0.01)
     console.clear()
 
 def print_banner(text, style=None, animate=True):
-    """Prints a styled banner using Rich with optional animation."""
     theme = get_current_theme()
     if style is None:
         style = theme.get("banner", "")
     if animate and storage.data.get("animations_enabled", True):
-        # Typewriter effect
         animated_text = ""
         panel = Panel(Align.center(Text(animated_text, style=style)),
-                     expand=False, box=box.HEAVY,
-                     border_style=theme.get("panel_border"))
-        with Live(Align.center(panel), refresh_per_second=20) as live:
+                     expand=False, box=box.HEAVY, border_style=theme.get("panel_border"))
+        with Live(Align.center(panel), refresh_per_second=30) as live:
             for char in text:
                 animated_text += char
                 panel = Panel(Align.center(Text(animated_text, style=style)),
-                            expand=False, box=box.HEAVY,
-                            border_style=theme.get("panel_border"))
+                              expand=False, box=box.HEAVY, border_style=theme.get("panel_border"))
                 live.update(Align.center(panel))
-                time.sleep(0.02)
+                time.sleep(0.01)
     else:
         panel = Panel(Align.center(Text(text, style=style)),
-                     expand=False, box=box.HEAVY,
-                     border_style=theme.get("panel_border"))
+                     expand=False, box=box.HEAVY, border_style=theme.get("panel_border"))
         console.print(Align.center(panel))
 
 def show_spinner(message, duration=1, style="clock"):
-    """Shows an animated spinner for a given duration."""
     if not storage.data.get("animations_enabled", True):
         time.sleep(duration)
         return
@@ -320,19 +274,30 @@ def show_spinner(message, duration=1, style="clock"):
             live.update(Align.center(text))
             time.sleep(0.1)
 
+# --- Cross Platform Input Handling ---
 def get_single_character():
-    """Gets a single character input from the user."""
-    file_descriptor = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(file_descriptor)
-    try:
-        tty.setraw(file_descriptor)
-        char = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(file_descriptor, termios.TCSADRAIN, old_settings)
-    return char
+    """Gets a single character input from the user (Cross-Platform)."""
+    if WINDOWS:
+        return msvcrt.getch().decode('utf-8', 'ignore')
+    else:
+        file_descriptor = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(file_descriptor)
+        try:
+            tty.setraw(file_descriptor)
+            char = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(file_descriptor, termios.TCSADRAIN, old_settings)
+        return char
+
+def check_keypress():
+    """Returns True if a key is waiting to be read."""
+    if WINDOWS:
+        return msvcrt.kbhit()
+    else:
+        dr, _, _ = select.select([sys.stdin], [], [], 0.0)
+        return bool(dr)
 
 def format_time(hour: int, minute: int) -> str:
-    """Format time based on user preference."""
     if storage.data.get("24hour_format", True):
         return f"{hour:02d}:{minute:02d}"
     else:
@@ -343,7 +308,6 @@ def format_time(hour: int, minute: int) -> str:
         return f"{display_hour}:{minute:02d} {period}"
 
 def validate_time_string(time_string):
-    """Validates a time string (HH:MM or HH:MM AM/PM)."""
     if " " in time_string:
         dt = datetime.datetime.strptime(time_string.upper(), "%I:%M %p")
         return dt.hour, dt.minute
@@ -357,7 +321,6 @@ def validate_time_string(time_string):
         return hour, minute
 
 def validate_integer_range(minimum_value, maximum_value):
-    """Returns a validator function for an integer range."""
     def validator(string_input):
         value = int(string_input)
         if not (minimum_value <= value <= maximum_value):
@@ -365,15 +328,13 @@ def validate_integer_range(minimum_value, maximum_value):
         return value
     return validator
 
-def validate_positive_integer(string_input):
-    """Validates a positive integer."""
+def validate_strictly_positive_integer(string_input):
     value = int(string_input)
-    if value < 0:
-        raise ValueError("Value must be positive")
+    if value <= 0:
+        raise ValueError("Value must be greater than 0")
     return value
 
 def get_validated_input(prompt, validator_function, error_message="Invalid input. Please try again."):
-    """Gets validated input from the user."""
     while True:
         user_input = Prompt.ask(prompt)
         try:
@@ -402,7 +363,6 @@ class Alarm:
         self.trigger_count = 0
 
     def get_next_ring_time(self, current_time):
-        """Calculate next ring time."""
         today = current_time.date()
         ring_time = datetime.datetime.combine(today, datetime.time(self.hour, self.minute))
         if self.recurrence == "once":
@@ -426,31 +386,26 @@ class Alarm:
                     raise RuntimeError("Could not calculate next alarm time within 14 days.")
 
     def is_active(self, current_time):
-        """Check if alarm should ring."""
         with self.lock:
             if not self.enabled:
                 return False
             if self.snooze_until and current_time.timestamp() < self.snooze_until:
                 return False
             next_ring = self.get_next_ring_time(current_time)
-            # Allow 1 second tolerance
             return abs((current_time - next_ring).total_seconds()) < 1
 
     def snooze(self, minutes=None):
-        """Snooze alarm."""
         with self.lock:
             snooze_time = minutes or self.snooze_duration
             self.snooze_until = int(time.time()) + (snooze_time * 60)
             storage.increment_stat("alarms_snoozed")
 
     def dismiss(self):
-        """Dismiss alarm."""
         with self.lock:
             self.snooze_until = 0
             self.last_triggered = datetime.datetime.now()
             self.trigger_count += 1
             storage.increment_stat("alarms_dismissed")
-            # Record in history
             history_entry = {
                 "label": self.label,
                 "time": f"{self.hour:02d}:{self.minute:02d}",
@@ -459,7 +414,6 @@ class Alarm:
             }
             with storage.lock:
                 storage.data["alarm_history"].append(history_entry)
-                # Keep only last 100 entries
                 storage.data["alarm_history"] = storage.data["alarm_history"][-100:]
 
 class AlarmManager:
@@ -470,29 +424,28 @@ class AlarmManager:
         self.running = True
         self.active_alarm = None
         self.alarm_thread = None
-        # Initialize pygame mixer
-        try:
-            pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
-            pygame.mixer.init()
-            self.mixer_available = True
-        except pygame.error:
-            self.mixer_available = False
-            console.print("[yellow]Warning: Audio mixer unavailable. Using system beep.[/yellow]")
-        # Load alarms
+        
+        self.mixer_available = False
+        if PYGAME_AVAILABLE:
+            try:
+                pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
+                pygame.mixer.init()
+                self.mixer_available = True
+            except pygame.error:
+                console.print("[yellow]Warning: Audio mixer unavailable. Using system beep.[/yellow]")
+        else:
+            console.print("[yellow]Warning: Pygame not installed. Audio disabled. Using system beep.[/yellow]")
+            
         self._load_alarms()
-        # Start watcher thread
         self.watcher_thread = threading.Thread(target=self._watcher, daemon=True)
         self.watcher_thread.start()
 
     def _load_alarms(self):
-        """Load alarms from storage."""
         with self.lock:
             self.alarms = []
             for alarm_data in self.storage.data["alarms"]:
                 try:
-                    # Handle old alarm data without new fields
                     if isinstance(alarm_data, dict):
-                        # Set default values for missing keys if necessary
                         alarm_data.setdefault("sound", None)
                         alarm_data.setdefault("volume", None)
                         alarm_data.setdefault("snooze_duration", 5)
@@ -503,9 +456,8 @@ class AlarmManager:
                     console.print(f"[red]Error loading alarm: {e}[/red]")
 
     def _watcher(self):
-        """Watch for alarms to trigger."""
         while self.running:
-            time.sleep(0.5)  # Check twice per second for better accuracy
+            time.sleep(0.5)
             now = datetime.datetime.now()
             with self.lock:
                 alarms_to_check = list(self.alarms)
@@ -516,42 +468,36 @@ class AlarmManager:
                     self.alarm_thread.start()
 
     def _play_bell(self, alarm):
-        """Play alarm sound with optional fade-in."""
         sound_type = alarm.sound
-        volume = alarm.volume / 100.0
+        volume = (alarm.volume or 75) / 100.0
         try:
             if sound_type == "beep":
-                # System beep with rhythm
                 beep_pattern = [0.2, 0.1, 0.2, 0.1, 0.5]
                 for duration in beep_pattern * 3:
                     print("\a", end="", flush=True)
                     time.sleep(duration)
             elif sound_type == "speech":
-                # Text-to-speech with custom message
                 message = f"Wake up! {alarm.label}"
-                subprocess.run(["espeak", "-s", "150", message], check=True)
-            elif sound_type.endswith((".wav", ".mp3", ".ogg")) and self.mixer_available:
+                subprocess.run(["espeak", "-s", "150", message], check=False)
+            elif sound_type and sound_type.endswith((".wav", ".mp3", ".ogg")) and self.mixer_available:
                 bell_path = os.path.join(BELL_DIR, sound_type)
                 if os.path.isfile(bell_path):
                     pygame.mixer.music.load(bell_path)
                     if alarm.fade_in:
-                        # Fade in over 3 seconds
                         pygame.mixer.music.set_volume(0)
-                        pygame.mixer.music.play(-1)  # Loop
+                        pygame.mixer.music.play(-1)
                         for i in range(30):
                             pygame.mixer.music.set_volume(volume * (i / 30))
                             time.sleep(0.1)
                     else:
                         pygame.mixer.music.set_volume(volume)
-                        pygame.mixer.music.play(-1)  # Loop
-                    # Keep playing until stopped
+                        pygame.mixer.music.play(-1)
                     while pygame.mixer.music.get_busy() and self.active_alarm == alarm:
                         time.sleep(0.1)
                 else:
                     console.print(f"[yellow]Sound file not found: {bell_path}[/yellow]")
-                    self._play_bell(Alarm(0, 0, "", sound="beep"))  # Fallback to beep
+                    self._play_bell(Alarm(0, 0, "", sound="beep"))
             else:
-                # Default beep
                 for _ in range(5):
                     print("\a", end="", flush=True)
                     time.sleep(0.5)
@@ -560,128 +506,100 @@ class AlarmManager:
             print("\a\a\a", end="", flush=True)
 
     def _ring(self, alarm):
-        """Ring alarm with enhanced UI."""
-        alarm.dismiss()  # Reset snooze and update stats
+        alarm.dismiss()
         self.log_event(f"Alarm triggered: {alarm.label}")
         clear_screen()
         theme = get_current_theme()
-        # Enhanced alarm display
         alarm_time = format_time(alarm.hour, alarm.minute)
-        # Create alarm UI
+        
         layout = Layout()
         layout.split_column(
             Layout(name="header", size=3),
             Layout(name="main", size=10),
             Layout(name="footer", size=3)
         )
-        # Animated alarm header
-        alarm_header = Panel(
-            Align.center(Text("🔔 ALARM 🔔", style="bold red blink")),
-            box=box.DOUBLE,
-            border_style="red"
-        )
+        
+        alarm_header = Panel(Align.center(Text("🔔 ALARM 🔔", style="bold red blink")), box=box.DOUBLE, border_style="red")
         layout["header"].update(alarm_header)
-        # Main alarm info
+        
         alarm_info = Panel(
             Align.center(
                 Text.from_markup(
                     f"[bold cyan]{alarm.label}[/bold cyan]\n"
                     f"[bold yellow]{alarm_time}[/bold yellow]\n"
-                    f"[dim]Press ENTER to stop • Type 's X' to snooze X minutes[/dim]"
+                    f"[dim]Press ENTER to stop • Press 's' to snooze[/dim]"
                 )
             ),
-            box=box.ROUNDED,
-            border_style=theme["accent"]
+            box=box.ROUNDED, border_style=theme["accent"]
         )
         layout["main"].update(alarm_info)
-        # Animated progress bar
+        
         progress = Progress(
-            SpinnerColumn("dots"),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=40),
-            console=console,
-            transient=True
+            SpinnerColumn("dots"), TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=40), console=console, transient=True
         )
         task = progress.add_task("[red]Alarm Active", total=100)
         layout["footer"].update(Align.center(progress))
-        # Start sound in separate thread
+        
         sound_thread = threading.Thread(target=self._play_bell, args=(alarm,))
         sound_thread.start()
-        # Display with animation
+        
         with Live(layout, refresh_per_second=10) as live:
             try:
-                # Animate progress bar
                 for i in range(100):
                     progress.update(task, advance=1)
                     time.sleep(0.05)
-                    # Check for input (non-blocking)
-                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                        user_input = sys.stdin.readline().strip().lower()
-                        if user_input.startswith("s "):
-                            try:
-                                snooze_minutes = int(user_input.split()[1])
-                                if snooze_minutes > 0:
-                                    alarm.snooze(snooze_minutes)
-                                    show_spinner(f"Snoozing for {snooze_minutes} minutes", 2, "clock")
-                                    break
-                            except (IndexError, ValueError):
-                                pass
-                        else:
-                            break
-                # Wait for user input if not already provided
-                if self.active_alarm == alarm:
-                    user_input = Prompt.ask(
-                        "\n[green]ENTER[/green] to stop, or '[yellow]s X[/yellow]' to snooze",
-                        default=""
-                    ).strip().lower()
-                    if user_input.startswith("s "):
-                        try:
-                            snooze_minutes = int(user_input.split()[1])
+                    
+                    if check_keypress():
+                        char = get_single_character()
+                        if char.lower() == 's':
+                            live.stop()
+                            snooze_minutes = IntPrompt.ask("\n[bold]Snooze for how many minutes?[/bold]", default=alarm.snooze_duration)
                             if snooze_minutes > 0:
                                 alarm.snooze(snooze_minutes)
                                 show_spinner(f"Snoozing for {snooze_minutes} minutes", 2, "clock")
-                        except (IndexError, ValueError):
-                            pass
+                                break
+                        elif char == '\r' or char == '\n':
+                            break
+                            
+                if self.active_alarm == alarm:
+                    live.stop()
+                    user_input = Prompt.ask("\n[green]ENTER[/green] to stop, or '[yellow]s[/yellow]' to snooze", default="").strip().lower()
+                    if user_input == "s":
+                        snooze_minutes = IntPrompt.ask("[bold]Snooze for how many minutes?[/bold]", default=alarm.snooze_duration)
+                        if snooze_minutes > 0:
+                            alarm.snooze(snooze_minutes)
+                            show_spinner(f"Snoozing for {snooze_minutes} minutes", 2, "clock")
             except KeyboardInterrupt:
                 pass
             finally:
-                # Stop sound
                 if self.mixer_available:
                     pygame.mixer.music.stop()
-                # Disable one-time alarms
-                if alarm.recurrence == "once":
+                if alarm.recurrence == "once" and alarm.snooze_until == 0:
                     with alarm.lock:
                         alarm.enabled = False
                 self.active_alarm = None
                 self.save_alarms()
 
     def log_event(self, message):
-        """Log an event."""
         event = {
             "time": datetime.datetime.now().isoformat(),
             "message": message
         }
         with self.storage.lock:
             self.storage.data["log"].append(event)
-            # Keep only last 1000 entries
             self.storage.data["log"] = self.storage.data["log"][-1000:]
         self.storage.save()
 
     def save_alarms(self):
-        """Save alarms to storage."""
         with self.lock:
             alarms_data = []
             for alarm in self.alarms:
                 alarm_dict = {
-                    "hour": alarm.hour,
-                    "minute": alarm.minute,
-                    "label": alarm.label,
-                    "recurrence": alarm.recurrence,
-                    "enabled": alarm.enabled,
-                    "sound": alarm.sound,
-                    "volume": alarm.volume,
-                    "snooze_duration": alarm.snooze_duration,
-                    "fade_in": alarm.fade_in
+                    "hour": alarm.hour, "minute": alarm.minute, "label": alarm.label,
+                    "recurrence": alarm.recurrence, "enabled": alarm.enabled,
+                    "sound": alarm.sound, "volume": alarm.volume,
+                    "snooze_duration": alarm.snooze_duration, "fade_in": alarm.fade_in
                 }
                 alarms_data.append(alarm_dict)
         with self.storage.lock:
@@ -690,7 +608,6 @@ class AlarmManager:
 
     def add_alarm(self, hour, minute, label, recurrence="once", sound=None,
                   volume=None, snooze_duration=5, fade_in=False):
-        """Add a new alarm."""
         with self.lock:
             alarm = Alarm(hour, minute, label, recurrence, True,
                          sound, volume, snooze_duration, fade_in)
@@ -700,7 +617,6 @@ class AlarmManager:
         return alarm
 
     def delete_alarm(self, index):
-        """Delete an alarm by index."""
         with self.lock:
             if 0 <= index < len(self.alarms):
                 deleted = self.alarms.pop(index)
@@ -709,7 +625,6 @@ class AlarmManager:
         return None
 
     def export_log(self):
-        """Export alarm log to CSV."""
         log_file_path = os.path.expanduser("~/radiant_alarm_log.csv")
         try:
             with self.storage.lock:
@@ -723,7 +638,6 @@ class AlarmManager:
             raise IOError(f"Error exporting log: {error}")
 
     def get_statistics(self):
-        """Get alarm statistics."""
         with self.lock:
             total_alarms = len(self.alarms)
             enabled_alarms = sum(1 for a in self.alarms if a.enabled)
@@ -737,12 +651,10 @@ class AlarmManager:
         return stats
 
     def menu(self):
-        """Enhanced alarm menu with better UI."""
         while True:
             clear_screen()
             print_banner("⏰  A L A R M   C L O C K", animate=False)
             theme = get_current_theme()
-            # Show next alarm
             with self.lock:
                 if self.alarms:
                     now = datetime.datetime.now()
@@ -758,7 +670,7 @@ class AlarmManager:
                     if next_alarms:
                         next_alarms.sort(key=lambda x: x[2])
                         if next_alarms:
-                            next_alarm, next_time, time_diff = next_alarms[0]
+                            next_alarm, _, time_diff = next_alarms[0]
                             hours, remainder = divmod(int(time_diff.total_seconds()), 3600)
                             minutes, _ = divmod(remainder, 60)
                             next_alarm_text = Text.from_markup(
@@ -767,7 +679,7 @@ class AlarmManager:
                             )
                             console.print(Align.center(Panel(next_alarm_text, box=box.ROUNDED)))
                             console.print()
-            # Menu options
+                            
             menu_items = [
                 ("1", "➕ Set New Alarm", theme["primary"]),
                 ("2", "📋 List Alarms", theme["primary"]),
@@ -783,37 +695,27 @@ class AlarmManager:
             for key, action, color in menu_items:
                 table.add_row(f"[{color}]{key}[/{color}]", f"[{color}]{action}[/{color}]")
             console.print(Align.center(table))
+            
             choice = Prompt.ask("\n[bold]Select an option[/bold]", choices=[str(i) for i in range(1, 8)])
-            if choice == "1":
-                self._set_alarm_interactive()
-            elif choice == "2":
-                self._list_alarms()
-            elif choice == "3":
-                self._edit_alarm()
-            elif choice == "4":
-                self._delete_alarm_interactive()
-            elif choice == "5":
-                self._show_statistics()
-            elif choice == "6":
-                self._export_log_interactive()
-            elif choice == "7":
-                break
+            if choice == "1": self._set_alarm_interactive()
+            elif choice == "2": self._list_alarms()
+            elif choice == "3": self._edit_alarm()
+            elif choice == "4": self._delete_alarm_interactive()
+            elif choice == "5": self._show_statistics()
+            elif choice == "6": self._export_log_interactive()
+            elif choice == "7": break
 
     def _set_alarm_interactive(self):
-        """Interactive alarm setting with enhanced UI."""
         clear_screen()
         print_banner("➕ SET NEW ALARM", animate=False)
         theme = get_current_theme()
         try:
-            # Time input with validation
             console.print("\n[bold]Enter alarm time:[/bold]")
             console.print("[dim]Format: HH:MM (24-hour) or HH:MM AM/PM (12-hour)[/dim]")
             time_input = Prompt.ask("Time")
             hour, minute = validate_time_string(time_input)
 
-            # Label input
             label = Prompt.ask("\n[bold]Label[/bold]", default="Alarm")
-            # Recurrence selection with visual
             console.print("\n[bold]Recurrence:[/bold]")
             recurrence_options = [
                 ("1", "Once", "📍", "Ring once then disable"),
@@ -829,12 +731,12 @@ class AlarmManager:
             for num, name, icon, desc in recurrence_options:
                 table.add_row(num, name, icon, desc)
             console.print(table)
+            
             recurrence_choice = Prompt.ask("Choose recurrence", choices=["1", "2", "3", "4"], default="1")
             recurrence_map = {"1": "once", "2": "daily", "3": "weekdays", "4": "weekends"}
             recurrence = recurrence_map[recurrence_choice]
-            # Advanced options
+            
             if Confirm.ask("\n[bold]Configure advanced options?[/bold]", default=False):
-                # Custom sound
                 console.print("\n[bold]Sound:[/bold]")
                 sounds = self._get_available_sounds()
                 sound_table = Table(show_header=False, box=None)
@@ -846,21 +748,17 @@ class AlarmManager:
                 console.print(sound_table)
                 sound_choice = IntPrompt.ask("Choose sound", default=1)
                 sound = sounds[sound_choice - 1] if 1 <= sound_choice <= len(sounds) else None
-                # Volume
                 volume = IntPrompt.ask("\n[bold]Volume (0-100)[/bold]", default=storage.data["bell_volume"])
                 volume = max(0, min(100, volume))
-                # Snooze duration
                 snooze_duration = IntPrompt.ask("\n[bold]Snooze duration (minutes)[/bold]", default=5)
-                # Fade in
                 fade_in = Confirm.ask("\n[bold]Enable fade-in effect?[/bold]", default=False)
             else:
                 sound = None
                 volume = None
                 snooze_duration = 5
                 fade_in = False
-            # Create alarm
+                
             alarm = self.add_alarm(hour, minute, label, recurrence, sound, volume, snooze_duration, fade_in)
-            # Success message with preview
             clear_screen()
             success_panel = Panel(
                 Align.center(
@@ -873,12 +771,9 @@ class AlarmManager:
                         f"[cyan]Volume:[/cyan] {alarm.volume}%"
                     )
                 ),
-                box=box.DOUBLE,
-                border_style="green",
-                title="[bold]Alarm Created[/bold]"
+                box=box.DOUBLE, border_style="green", title="[bold]Alarm Created[/bold]"
             )
             console.print(success_panel)
-            # Calculate time until alarm
             now = datetime.datetime.now()
             next_ring = alarm.get_next_ring_time(now)
             time_diff = next_ring - now
@@ -891,14 +786,12 @@ class AlarmManager:
         input("\nPress Enter to continue...")
 
     def _list_alarms(self):
-        """List all alarms with enhanced display."""
         clear_screen()
         print_banner("📋 ALARM LIST", animate=False)
         with self.lock:
             if not self.alarms:
                 console.print(Panel("[yellow]No alarms set[/yellow]", box=box.ROUNDED))
             else:
-                # Group alarms by status
                 enabled_alarms = [a for a in self.alarms if a.enabled]
                 disabled_alarms = [a for a in self.alarms if not a.enabled]
                 if enabled_alarms:
@@ -909,7 +802,6 @@ class AlarmManager:
         input("\nPress Enter to continue...")
 
     def _display_alarm_table(self, title, alarms, color):
-        """Display a table of alarms."""
         theme = get_current_theme()
         table = Table(title=title, box=box.ROUNDED, title_style=f"bold {color}")
         table.add_column("ID", style="dim", width=4)
@@ -929,17 +821,12 @@ class AlarmManager:
             except:
                 next_ring_str = "N/A"
             table.add_row(
-                str(i),
-                format_time(alarm.hour, alarm.minute),
-                alarm.label,
-                alarm.recurrence.title(),
-                alarm.sound,
-                next_ring_str
+                str(i), format_time(alarm.hour, alarm.minute), alarm.label,
+                alarm.recurrence.title(), alarm.sound, next_ring_str
             )
         console.print(table)
 
     def _edit_alarm(self):
-        """Edit an existing alarm."""
         clear_screen()
         print_banner("✏️ EDIT ALARM", animate=False)
         with self.lock:
@@ -947,7 +834,6 @@ class AlarmManager:
                 console.print(Panel("[yellow]No alarms to edit[/yellow]", box=box.ROUNDED))
                 input("\nPress Enter to continue...")
                 return
-            # Display alarms
             self._display_alarm_table("Select Alarm to Edit", self.alarms, "blue")
         try:
             index = IntPrompt.ask("\nEnter alarm ID to edit") - 1
@@ -955,11 +841,9 @@ class AlarmManager:
                 if not (0 <= index < len(self.alarms)):
                     raise ValueError("Invalid alarm ID")
                 alarm = self.alarms[index]
-            # Edit menu
             while True:
                 clear_screen()
                 print_banner(f"✏️ EDITING: {alarm.label}", animate=False)
-                # Display current settings
                 info_table = Table(show_header=False, box=box.SIMPLE)
                 info_table.add_column("Property", style="cyan")
                 info_table.add_column("Value", style="white")
@@ -972,13 +856,14 @@ class AlarmManager:
                 info_table.add_row("Snooze Duration", f"{alarm.snooze_duration} min")
                 info_table.add_row("Fade In", "Yes" if alarm.fade_in else "No")
                 console.print(Align.center(info_table))
-                # Edit options
+                
                 console.print("\n[bold]What would you like to edit?[/bold]")
                 options = ["1. Time", "2. Label", "3. Recurrence", "4. Enable/Disable",
                           "5. Sound", "6. Volume", "7. Snooze Duration", "8. Fade In", "9. Done"]
                 for opt in options:
                     console.print(opt)
                 choice = Prompt.ask("Choice", choices=[str(i) for i in range(1, 10)])
+                
                 if choice == "1":
                     time_input = Prompt.ask("New time (HH:MM)")
                     hour, minute = validate_time_string(time_input)
@@ -1006,8 +891,7 @@ class AlarmManager:
                     alarm.volume = IntPrompt.ask("Volume (0-100)", default=alarm.volume)
                     alarm.volume = max(0, min(100, alarm.volume))
                 elif choice == "7":
-                    alarm.snooze_duration = IntPrompt.ask("Snooze duration (minutes)",
-                                                         default=alarm.snooze_duration)
+                    alarm.snooze_duration = IntPrompt.ask("Snooze duration (minutes)", default=alarm.snooze_duration)
                 elif choice == "8":
                     alarm.fade_in = not alarm.fade_in
                     status = "enabled" if alarm.fade_in else "disabled"
@@ -1023,7 +907,6 @@ class AlarmManager:
         input("\nPress Enter to continue...")
 
     def _delete_alarm_interactive(self):
-        """Interactive alarm deletion."""
         clear_screen()
         print_banner("🗑️ DELETE ALARM", animate=False)
         with self.lock:
@@ -1047,14 +930,12 @@ class AlarmManager:
         input("\nPress Enter to continue...")
 
     def _show_statistics(self):
-        """Show alarm statistics."""
         clear_screen()
         print_banner("📊 ALARM STATISTICS", animate=False)
         stats = self.get_statistics()
         theme = get_current_theme()
-        # Create statistics panels
         panels = []
-        # Overview panel
+        
         overview = Panel(
             Text.from_markup(
                 f"[bold]Total Alarms:[/bold] {stats['total_alarms']}\n"
@@ -1063,12 +944,10 @@ class AlarmManager:
                 f"[bold]Alarms Dismissed:[/bold] {stats['alarms_dismissed']}\n"
                 f"[bold]Alarms Snoozed:[/bold] {stats['alarms_snoozed']}"
             ),
-            title="Overview",
-            box=box.ROUNDED,
-            border_style=theme["primary"]
+            title="Overview", box=box.ROUNDED, border_style=theme["primary"]
         )
         panels.append(overview)
-        # Recent history
+        
         with storage.lock:
             history_data = storage.data.get("alarm_history", [])
         if history_data:
@@ -1087,22 +966,20 @@ class AlarmManager:
                 except Exception:
                     history_items.append(f"• {entry['label']} (Unknown time)")
             history_panel = Panel(
-                "\n".join(history_items),
-                title="Recent Alarms",
-                box=box.ROUNDED,
-                border_style=theme["secondary"]
+                "\n".join(history_items), title="Recent Alarms",
+                box=box.ROUNDED, border_style=theme["secondary"]
             )
             panels.append(history_panel)
-        # Display panels
+            
         if panels:
             console.print(Columns(panels, equal=True, expand=True))
         else:
             console.print("[dim]No statistics available yet.[/dim]")
-        # Usage chart (simple ASCII)
+            
         if stats['alarms_dismissed'] > 0:
             console.print("\n[bold]Alarm Activity:[/bold]")
             total = stats['alarms_dismissed'] + stats['alarms_snoozed']
-            if total > 0: # Avoid division by zero
+            if total > 0:
                 dismissed_pct = stats['alarms_dismissed'] / total * 100
                 snoozed_pct = stats['alarms_snoozed'] / total * 100
                 bar_width = 40
@@ -1113,7 +990,6 @@ class AlarmManager:
         input("\nPress Enter to continue...")
 
     def _export_log_interactive(self):
-        """Interactive log export."""
         clear_screen()
         print_banner("📁 EXPORT LOG", animate=False)
         try:
@@ -1131,16 +1007,13 @@ class AlarmManager:
         input("\nPress Enter to continue...")
 
     def _get_available_sounds(self):
-        """Get list of available alarm sounds."""
         sounds = ["beep", "speech"]
-        # Add custom sound files
         for ext in ["*.wav", "*.mp3", "*.ogg"]:
             sounds.extend([os.path.basename(f) for f in glob.glob(os.path.join(BELL_DIR, ext))])
         return sounds
 
 # --- Enhanced World Clock ---
 class WorldClock:
-    # Enhanced timezone data with city coordinates
     MAJOR_CITIES = {
         "UTC": {"lat": 51.4769, "lon": -0.0005, "city": "London"},
         "America/New_York": {"lat": 40.7128, "lon": -74.0060, "city": "New York"},
@@ -1164,64 +1037,45 @@ class WorldClock:
 
     @classmethod
     def get_all_timezones(cls):
-        """Get all available timezones."""
         try:
-            with open("/usr/share/zoneinfo/zone1970.tab", 'r') as file:
-                return [line.split("\t")[2] for line in file if not line.startswith("#")]
-        except:
+            return list(available_timezones())
+        except NameError:
             return list(cls.MAJOR_CITIES.keys())
 
     @classmethod
-    def get_time_for_zone(cls, timezone):
-        """Get current time for a timezone."""
-        prev_tz = os.environ.get("TZ")
-        os.environ["TZ"] = timezone
-        time.tzset()
-        now = datetime.datetime.now()
-        if prev_tz:
-            os.environ["TZ"] = prev_tz
-        else:
-            os.unsetenv("TZ")
-        time.tzset()
-        return now
+    def get_time_for_zone(cls, timezone_name):
+        try:
+            return datetime.datetime.now(ZoneInfo(timezone_name))
+        except Exception:
+            return datetime.datetime.now()
 
     @classmethod
     def get_weather_emoji(cls, hour):
-        """Get weather emoji based on time of day."""
-        if 6 <= hour < 12:
-            return "🌅"  # Morning
-        elif 12 <= hour < 17:
-            return "☀️"   # Afternoon
-        elif 17 <= hour < 20:
-            return "🌇"  # Evening
-        else:
-            return "🌙"  # Night
+        if 6 <= hour < 12: return "🌅"
+        elif 12 <= hour < 17: return "☀️"
+        elif 17 <= hour < 20: return "🌇"
+        else: return "🌙"
 
     @classmethod
     def show_world_map(cls):
-        """Show ASCII world map with time zones."""
         clear_screen()
         print_banner("🗺️ WORLD TIME MAP", animate=False)
-        # Simple ASCII world map
         world_map = """
         ┌─────────────────────────────────────────────────────────────┐
         │     🌍 WORLD TIME ZONES                                     │
         │                                                             │
-        │  LA ──── CHI ─── NYC ─── LON ─── BER ─── MOS              │
-        │  🌃      🌆      🌃      🌙      🌙      🌙               │
+        │  LA ──── CHI ─── NYC ─── LON ─── BER ─── MOS                │
+        │  🌃      🌆      🌃      🌙      🌙      🌙                 │
         │                                                             │
-        │                 DXB ─── MUM ─── SHA ─── TOK ─── SYD        │
-        │                 🌅      ☀️       🌇      🌃      🌅         │
+        │                DXB ─── MUM ─── SHA ─── TOK ─── SYD          │
+        │                🌅      ☀️        🌇      🌃      🌅           │
         └─────────────────────────────────────────────────────────────┘
         """
         theme = get_current_theme()
         console.print(Panel(world_map, box=box.ROUNDED, border_style=theme["primary"]))
-        # Show actual times
         cities = [
-            ("LA", "America/Los_Angeles"),
-            ("NYC", "America/New_York"),
-            ("LON", "Europe/London"),
-            ("TOK", "Asia/Tokyo"),
+            ("LA", "America/Los_Angeles"), ("NYC", "America/New_York"),
+            ("LON", "Europe/London"), ("TOK", "Asia/Tokyo"),
             ("SYD", "Australia/Sydney")
         ]
         time_row = ""
@@ -1234,41 +1088,26 @@ class WorldClock:
 
     @classmethod
     def show_timezone_converter(cls):
-        """Interactive timezone converter."""
         clear_screen()
         print_banner("🔄 TIME CONVERTER", animate=False)
         theme = get_current_theme()
         try:
-            # Source timezone
             console.print("[bold]Convert from:[/bold]")
             source_tz = cls._pick_timezone_interactive()
-            if not source_tz:
-                return
-            # Target timezone
+            if not source_tz: return
+            
             console.print("\n[bold]Convert to:[/bold]")
             target_tz = cls._pick_timezone_interactive()
-            if not target_tz:
-                return
-            # Get time to convert
+            if not target_tz: return
+            
             console.print("\n[bold]Enter time in source timezone (HH:MM):[/bold]")
             time_input = Prompt.ask("Time")
             hour, minute = validate_time_string(time_input)
-            # Create datetime object in source timezone
-            prev_tz = os.environ.get("TZ")
-            os.environ["TZ"] = source_tz
-            time.tzset()
-            # Assume today's date for conversion
-            source_time = datetime.datetime.combine(datetime.date.today(), datetime.time(hour, minute))
-            # Convert to target timezone
-            os.environ["TZ"] = target_tz
-            time.tzset()
-            target_time = source_time.astimezone()
-            if prev_tz:
-                os.environ["TZ"] = prev_tz
-            else:
-                os.unsetenv("TZ")
-            time.tzset()
-            # Display result
+            
+            today = datetime.date.today()
+            source_time = datetime.datetime.combine(today, datetime.time(hour, minute)).replace(tzinfo=ZoneInfo(source_tz))
+            target_time = source_time.astimezone(ZoneInfo(target_tz))
+            
             result_panel = Panel(
                 Text.from_markup(
                     f"[bold]{source_tz}[/bold]\n"
@@ -1276,9 +1115,7 @@ class WorldClock:
                     f"[bold]{target_tz}[/bold]\n"
                     f"{target_time.strftime('%H:%M')}"
                 ),
-                title="Conversion Result",
-                box=box.DOUBLE,
-                border_style=theme["accent"]
+                title="Conversion Result", box=box.DOUBLE, border_style=theme["accent"]
             )
             console.print("\n")
             console.print(Align.center(result_panel))
@@ -1288,68 +1125,60 @@ class WorldClock:
 
     @classmethod
     def _pick_timezone_interactive(cls):
-        """Interactive timezone picker."""
-        try:
-            with open("/usr/share/zoneinfo/zone1970.tab", 'r') as file:
-                timezones = [line.split("\t")[2] for line in file if not line.startswith("#")]
-        except:
-            timezones = list(cls.MAJOR_CITIES.keys())
+        timezones = cls.get_all_timezones()
         if not timezones:
             console.print("[red]No timezones available.[/red]")
             return None
+            
+        # Optional sorting to easily find common ones
+        timezones.sort()
         index = 0
         while True:
             clear_screen()
             print_banner("🌍 PICK A TIMEZONE", animate=False)
             theme = get_current_theme()
-            console.print("[dim]↑/↓: Scroll  /: Search  q: Back[/dim]")
+            console.print("[dim]Use 'n' (Next), 'p' (Prev) to scroll, '/' to search, 'q' to back, or type number to select[/dim]")
             console.print("-" * 60, style=theme["dim"])
             display_timezones = timezones[index:index+20]
+            
             table = Table(show_header=False, box=None, padding=(0, 1))
             table.add_column("No.", width=3)
             table.add_column("Timezone")
             for i, tz in enumerate(display_timezones, start=index+1):
                 table.add_row(str(i), tz)
             console.print(table)
-            char = get_single_character()
-            if char == "\x1b":
-                char += sys.stdin.read(2)
-                if char == "\x1b[A":  # Up arrow
-                    index = max(0, index - 1)
-                elif char == "\x1b[B":  # Down arrow
-                    index = min(len(timezones) - 20, index + 1)
-            elif char == "/":
-                search_term = Prompt.ask("\nSearch term").strip().lower()
+            
+            action = Prompt.ask("Action").strip().lower()
+            if action == 'n':
+                index = min(len(timezones) - 20, index + 20)
+            elif action == 'p':
+                index = max(0, index - 20)
+            elif action.startswith('/'):
+                search_term = action[1:].strip()
                 if search_term:
                     timezones = [z for z in cls.get_all_timezones() if search_term in z.lower()]
                     index = 0
                 else:
-                    try:
-                        with open("/usr/share/zoneinfo/zone1970.tab", 'r') as file:
-                            timezones = [line.split("\t")[2] for line in file if not line.startswith("#")]
-                    except:
-                        timezones = list(cls.MAJOR_CITIES.keys())
-            elif char == "\r":  # Enter
-                if display_timezones:
-                    selected_index_in_display = min(len(display_timezones)-1, max(0, index - (index // 20) * 20))
-                    if 0 <= selected_index_in_display < len(display_timezones):
-                        return display_timezones[selected_index_in_display]
-            elif char.lower() == "q":
+                    timezones = cls.get_all_timezones()
+            elif action == 'q':
                 return None
+            elif action.isdigit():
+                sel_idx = int(action) - 1
+                if 0 <= sel_idx < len(timezones):
+                    return timezones[sel_idx]
 
     @classmethod
     def show_multiple_timezones(cls):
-        """Display multiple timezones in a grid."""
         clear_screen()
         print_banner("🌎 MULTIPLE TIMEZONES", animate=False)
         theme = get_current_theme()
-        # Use favorites or default list
         with storage.lock:
             zones_to_show = storage.data["favorite_timezones"] if storage.data["favorite_timezones"] else list(cls.MAJOR_CITIES.keys())[:9]
         if not zones_to_show:
             console.print("[yellow]No zones to display. Add some favorites![/yellow]")
             input("\nPress Enter to continue...")
             return
+            
         panels = []
         for tz in zones_to_show:
             try:
@@ -1361,7 +1190,8 @@ class WorldClock:
                 panel = Panel(panel_content, box=box.ROUNDED, border_style=theme["primary"])
                 panels.append(panel)
             except Exception:
-                pass # Skip problematic timezones
+                pass 
+                
         if panels:
             console.print(Columns(panels, equal=True, expand=True))
         else:
@@ -1370,7 +1200,6 @@ class WorldClock:
 
     @classmethod
     def menu(cls):
-        """World Clock Menu"""
         while True:
             clear_screen()
             print_banner("🌍 WORLD CLOCK", animate=False)
@@ -1387,31 +1216,29 @@ class WorldClock:
             for key, action, color in menu_items:
                 table.add_row(f"[{color}]{key}[/{color}]", f"[{color}]{action}[/{color}]")
             console.print(Align.center(table))
+            
             choice = Prompt.ask("\n[bold]Select an option[/bold]", choices=["1", "2", "3", "4"])
-            if choice == "1":
-                cls.show_world_map()
-            elif choice == "2":
-                cls.show_timezone_converter()
-            elif choice == "3":
-                cls.show_multiple_timezones()
-            elif choice == "4":
-                break
+            if choice == "1": cls.show_world_map()
+            elif choice == "2": cls.show_timezone_converter()
+            elif choice == "3": cls.show_multiple_timezones()
+            elif choice == "4": break
 
 # --- Enhanced Timer ---
 class Timer:
     @staticmethod
     def countdown():
         try:
-            minutes = get_validated_input("Enter minutes for countdown: ", validate_positive_integer)
+            minutes = get_validated_input("Enter minutes for countdown: ", validate_strictly_positive_integer)
         except (ValueError, KeyboardInterrupt):
             console.print("\n[red]Invalid input or cancelled.[/red]")
             time.sleep(1)
             return
+            
         total_seconds = minutes * 60
         paused = False
         pause_start_time = None
-
         theme = get_current_theme()
+        
         with Live(console=console, auto_refresh=False) as live:
             while total_seconds > 0 or paused:
                 if not paused:
@@ -1419,65 +1246,52 @@ class Timer:
                     mins, secs = divmod(remainder, 60)
                     time_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-                    # Progress Bar
-                    progress_percentage = 1.0 - (total_seconds / (minutes * 60)) if minutes > 0 else 1.0
+                    progress_percentage = 1.0 - (total_seconds / (minutes * 60))
                     progress_bar = Progress(
                         TextColumn("[progress.description]{task.description}"),
                         BarColumn(bar_width=40),
                         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                        TimeRemainingColumn(),
-                        console=console
+                        TimeRemainingColumn(), console=console
                     )
                     task_id = progress_bar.add_task("Countdown", total=1.0)
                     progress_bar.update(task_id, completed=progress_percentage)
 
-                    # Create a panel for the countdown
                     panel_content = f"[bold red]{time_str}[/bold red]\n"
                     panel = Panel(panel_content, title="[blink]⏳ Countdown[/blink]", expand=False, border_style="red", box=box.DOUBLE)
                     layout = Layout()
-                    layout.split_column(
-                        Layout(Align.center(panel)),
-                        Layout(Align.center(progress_bar))
-                    )
+                    layout.split_column(Layout(Align.center(panel)), Layout(Align.center(progress_bar)))
                     live.update(layout)
                     live.refresh()
 
-                    # Check for pause/resume keypress (non-blocking)
-                    ready, _, _ = select.select([sys.stdin], [], [], 0)
-                    if ready:
+                    if check_keypress():
                         char = get_single_character()
                         if char.lower() == 'p':
                             paused = True
                             pause_start_time = time.time()
-                            console.print("[yellow]Paused. Press 'r' to resume.[/yellow]")
 
                     if not paused:
                         time.sleep(1)
                         total_seconds -= 1
-                else: # Paused state
-                     # Show paused indicator and wait for 'r'
-                     elapsed_pause = int(time.time() - pause_start_time)
-                     pause_str = f"[yellow]PAUSED ({elapsed_pause}s)[/yellow]"
-                     panel = Panel(pause_str, title="[blink]⏳ Countdown[/blink]", expand=False, border_style="yellow", box=box.DOUBLE)
-                     live.update(Align.center(panel))
-                     live.refresh()
+                else:
+                    elapsed_pause = int(time.time() - pause_start_time)
+                    pause_str = f"[yellow]PAUSED ({elapsed_pause}s)[/yellow]\nPress 'r' to resume."
+                    panel = Panel(pause_str, title="[blink]⏳ Countdown[/blink]", expand=False, border_style="yellow", box=box.DOUBLE)
+                    live.update(Align.center(panel))
+                    live.refresh()
 
-                     ready, _, _ = select.select([sys.stdin], [], [], 0.5) # Check every 0.5s
-                     if ready:
-                         char = get_single_character()
-                         if char.lower() == 'r':
-                             paused = False
-                             # Compensate for pause time
-                             total_seconds += int(time.time() - pause_start_time)
-                             console.print("[green]Resumed.[/green]")
+                    time.sleep(0.1)
+                    if check_keypress():
+                        char = get_single_character()
+                        if char.lower() == 'r':
+                            paused = False
+                            # Compensate to not skip seconds during pause
+                            time.sleep(0.9) 
 
         clear_screen()
-        # --- Rich Time's Up Display ---
         console.print(Panel("[bold red blink]🔔 TIME'S UP!!![/bold red blink]", expand=False, box=box.DOUBLE, border_style="red"))
         alarm_manager = AlarmManager(storage)
-        alarm_manager._play_bell(Alarm(0,0,"Timer Up", sound="beep")) # Use default beep for timer
+        alarm_manager._play_bell(Alarm(0,0,"Timer Up", sound="beep"))
         input("Press Enter to stop alarm...")
-        # ----------------------------
         storage.increment_stat("timers_completed")
 
     @staticmethod
@@ -1494,20 +1308,18 @@ class Timer:
                     mins, secs = divmod(remainder, 60)
                     time_str = f"{int(hours):02d}:{int(mins):02d}:{secs:06.3f}"
 
-                    # Create a panel for the stopwatch
                     panel_content = f"[bold green]{time_str}[/bold green]"
                     if laps:
                         panel_content += "\n[dim]--- Laps ---[/dim]\n"
-                        for i, lap_time in enumerate(laps[-5:], 1): # Show last 5 laps
+                        for i, lap_time in enumerate(laps[-5:], max(1, len(laps)-4)):
                             panel_content += f"[dim]{i}. {lap_time}[/dim]\n"
 
                     panel = Panel(panel_content.rstrip(), title="[blink]⏱ Stopwatch[/blink]", expand=False, border_style="green", box=box.ROUNDED)
                     live.update(Align.center(panel))
                     live.refresh()
-
-                    # Non-blocking check for keypress using select
-                    ready, _, _ = select.select([sys.stdin], [], [], 0.05)
-                    if ready:
+                    
+                    time.sleep(0.05)
+                    if check_keypress():
                         char = get_single_character().lower()
                         if char == 's':
                             break
@@ -1517,7 +1329,6 @@ class Timer:
                             lap_mins, lap_secs = divmod(lap_rem, 60)
                             lap_str = f"{int(lap_hours):02d}:{int(lap_mins):02d}:{lap_secs:06.3f}"
                             laps.append(lap_str)
-                            console.print(f"[blue]Lap {len(laps)}: {lap_str}[/blue]")
 
         except KeyboardInterrupt:
             pass
@@ -1537,9 +1348,10 @@ class Timer:
 class Settings:
     @staticmethod
     def menu(storage_instance):
-        bells = ["beep", "speech"] + [os.path.basename(f) for f in glob.glob(os.path.join(BELL_DIR, "*.wav"))]
-        bells += [os.path.basename(f) for f in glob.glob(os.path.join(BELL_DIR, "*.mp3"))]
-        bells += [os.path.basename(f) for f in glob.glob(os.path.join(BELL_DIR, "*.ogg"))]
+        bells = ["beep", "speech"]
+        for ext in ["*.wav", "*.mp3", "*.ogg"]:
+            bells.extend([os.path.basename(f) for f in glob.glob(os.path.join(BELL_DIR, ext))])
+            
         while True:
             clear_screen()
             print_banner("⚙️ SETTINGS", animate=False)
@@ -1559,7 +1371,6 @@ class Settings:
             choice = Prompt.ask("[bold]Select an option[/bold]", choices=["1", "2", "3", "4", "5", "6", "7"])
 
             if choice == "1":
-                 # --- Theme Selection with Preview ---
                  theme_names = list(theme_manager.get_all_themes().keys())
                  current_theme_name = storage.data.get("theme", "cyberpunk")
                  console.print("--- Available Themes ---", style=theme["secondary"])
@@ -1582,15 +1393,13 @@ class Settings:
                          storage_instance.data["theme"] = selected_theme_name
                      storage_instance.save()
                      console.print(f"[green]Theme set to '{selected_theme_name}'.[/green]")
-                     # Brief preview of new theme
                      new_theme = theme_manager.get_theme(selected_theme_name)
                      preview_text = Text("Theme Preview: This is sample text.", style=new_theme["primary"])
                      console.print(Panel(preview_text, expand=False, border_style=new_theme["panel_border"]))
-                     time.sleep(1.5) # Show preview briefly
+                     time.sleep(1.5)
                  except (ValueError, KeyboardInterrupt):
                      console.print("\n[yellow]Theme selection cancelled.[/yellow]")
                      time.sleep(1)
-                 # --------------------------
 
             elif choice == "2":
                 console.print("--- Available Sounds ---", style=theme["secondary"])
@@ -1663,21 +1472,6 @@ class Settings:
                 time.sleep(1)
 
 # --- Utility Functions ---
-def ntp_sync():
-    clear_screen()
-    print_banner("⏲ NTP SYNC", style=get_current_theme()["warning"], animate=False)
-    try:
-        show_spinner("Querying NTP", 2, "clock")
-        result = subprocess.run(["sudo", "ntpdate", "-s", "pool.ntp.org"], capture_output=True, text=True, check=True)
-        console.print("[green]System time updated successfully ✓[/green]")
-    except subprocess.CalledProcessError as error:
-        console.print(f"[red]Could not sync: ntpdate failed. {error}[/red]")
-    except FileNotFoundError:
-        console.print("[red]Could not sync: 'ntpdate' command not found. Is it installed?[/red]")
-    except KeyboardInterrupt:
-        console.print("\n[yellow]NTP sync cancelled.[/yellow]")
-    input("Press Enter to continue...")
-
 def daily_quote():
     quotes = [
         "The bad news is time flies. The good news is you're the pilot. - Michael Altshuler",
@@ -1719,15 +1513,16 @@ def main():
 
     plugins = load_plugins()
     alarm_manager = AlarmManager(storage)
+    
     while True:
         clear_screen()
-        print_banner("🕒 R A D I A N T   C L O C K", animate=True) # Animate main banner
+        print_banner("🕒 R A D I A N T   C L O C K", animate=True)
         theme = get_current_theme()
         if storage.data.get("show_quotes", True):
             quote_panel = Panel(Align.center(Text(daily_quote(), style=theme["dim"])), box=box.SIMPLE)
             console.print(quote_panel)
-        console.print("") # Spacer
-        # Main Menu
+        console.print("")
+        
         menu_items = [
             ("1", "⏰ Alarm Clock", theme["primary"]),
             ("2", "🌍 World Clock", theme["primary"]),
@@ -1735,7 +1530,7 @@ def main():
             ("4", "⏱ Stopwatch", theme["primary"]),
             ("5", "⚙️ Settings", theme["primary"]),
         ]
-        # Add plugins
+        
         for idx, (name, _) in enumerate(plugins, start=6):
             menu_items.append((str(idx), f"🔌 Plugin: {name}", theme["info"]))
         menu_items.append((str(6 + len(plugins)), "🚪 Quit", theme["danger"]))
@@ -1760,7 +1555,7 @@ def main():
             elif choice_number == 4:
                 Timer.stopwatch()
             elif choice_number == 5:
-                 Settings.menu(storage)
+                Settings.menu(storage)
             elif 6 <= choice_number < 6 + len(plugins):
                 _, plugin_function = plugins[choice_number - 6]
                 try:
@@ -1774,7 +1569,6 @@ def main():
                 alarm_manager.watcher_thread.join(timeout=2)
                 if alarm_manager.mixer_available:
                     pygame.mixer.quit()
-                # Save final stats
                 storage.save()
                 break
             else:
@@ -1789,15 +1583,8 @@ def main():
             alarm_manager.watcher_thread.join(timeout=2)
             if alarm_manager.mixer_available:
                 pygame.mixer.quit()
-            # Save final stats
             storage.save()
             break
 
 if __name__ == "__main__":
-    # Ensure select is available for non-blocking input (mainly for Linux)
-    try:
-        import select
-    except ImportError:
-        select = None
-        console.print("[yellow]Note: Non-blocking keypress might not work perfectly on this system.[/yellow]")
     main()
